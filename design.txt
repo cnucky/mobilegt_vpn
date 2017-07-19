@@ -1,0 +1,108 @@
+sudo ip tuntap add dev tun99 mode tun
+
+tun99     Link encap:UNSPEC  HWaddr 00-00-00-00-00-00-00-00-00-00-00-00-00-00-00-00  
+          POINTOPOINT NOARP MULTICAST  MTU:1500  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:0 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:500 
+          RX bytes:0 (0.0 B)  TX bytes:0 (0.0 B)
+		  
+sudo ifconfig tun99 192.168.0.254 dstaddr 192.168.0.253 up
+sudo ifconfig tun99 192.168.0.254 up
+tun接口设置IP的用途是什么？按原来的方式是设置两个点对点地址，然后会自动生成一个到对端地址的路由。如果只设置一个tun接口ip，则不会生成路由
+
+ip-10-77-2-2.ap *               255.255.255.255 UH    0      0        0 tun2
+10.77.2.2是对端地址，10.77.2.1是tun接口地址，貌似并未任何地方使用。
+
+tun99     Link encap:UNSPEC  HWaddr 00-00-00-00-00-00-00-00-00-00-00-00-00-00-00-00  
+          inet addr:192.168.0.254  P-t-P:192.168.0.254  Mask:255.255.255.255
+          UP POINTOPOINT NOARP MULTICAST  MTU:1500  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:0 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:500 
+          RX bytes:0 (0.0 B)  TX bytes:0 (0.0 B)
+
+sudo route add -net 192.168.0.0/24 dev tun99
+tun接口相关路由，nat之后IP为内网地址，应该是需要设置路由才会转发到正确的接口
+===============================================
+分析：为一个TUN网卡支持多个客户端，理论上应该采用TUN网卡不设置地址，只添加网段路由的方式。建立连接时只要从网段中分配一个IP给client
+
+TUN_interface
+	TUN接口，对应一个TUN网卡
+	tun接口添加
+		删除tun网卡:		sudo ip tuntap del dev $TUN_NAME mode tun
+		添加tun网卡:		sudo ip tuntap add dev $TUN_NAME mode tun
+		设置tun网卡地址:	sudo ifconfig $TUN_NAME $TUN_ADDR dstaddr $TUN_DSTADDR up
+		***：TUN网卡地址应该可以不用设置，而是通过添加路由的方式
+	
+系统启动参数：
+	TUN接口名
+	tunnel监听端口
+	约定密钥
+	抓包脚本名
+	MTU
+	DNS
+
+打开TUN接口
+	
+tunnel
+	选择一个socket服务端口，如8000
+	监听8000端口
+	int sockfd;
+	sockfd=socket(AF_INET,SOCK_DGRM,0)
+
+mainthread_tunnel：处理来自手机客户端的数据，若是第一次连接则由其它线程检查密钥并返回响应，若是数据，则放入缓冲池，由其它线程将数据发送给TUN，然后NAT发送到互联网
+	recvfrom(tunnel)
+		if 0:pw:id	sendto 0:param
+			检查pw是否正确，否则记录非法连接（客户端ip，时间）
+			param：-m 1400 -a $PRIVATE_ADDR 32 -d $DNS_ADDR -r 0.0.0.0 0
+			记录client，记录的数据包括客户端ip，分配给客户端的私网ip
+		if 1:data	检查client是否在池中，不是则丢弃，是则将数据放入缓冲池(send to TUN)
+			检查client的ip是否在池中，不是则检查近期是否连接过？
+				没有则丢弃，并记录非法链接（客户端IP，时间），
+				近期有成功链接过则重新提示用户重新发送连接检查报文
+该线程的核心是不断接收服务端口的数据，然后转给其它线程处理。若监听端口无数据时则会阻塞等待
+#define MAXLINE 4096
+struct sockaddr_in,cliaddr;
+len=sizeof(cliaddr))
+char mesg[MAXLINE]
+recvfrom(sockfd,mesg,MAXLINE,0,pcliaddr,&len)
+
+
+mainthread_TUN：处理来自互联网的响应数据，放入缓冲池，由其它线程将数据发送给对应的客户端手机
+	read(TUN)
+		数据放入缓冲池(send to tunnel)，查询client连接活动记录依据clientTunIP得到clientDstIP
+该线程的核心是不断接收TUN端口的数据，然后转给其他线程处理。若监听的TUN接口无数据则会阻塞等待
+		
+其它线程(线程池)
+	读取缓冲池(send to TUN)里的数据发送给对应TUN
+		write(TUN)
+	读取缓冲池(send to tunnel)里的数据发送给对应client
+		sendto(tunnel)
+	处理第一次连接密钥检查及已连接客户端数据维护
+	
+client连接记录
+	clientIp
+	port
+	tunIp
+	时间
+
+数据缓冲池
+	数据缓冲池send to TUN
+		该缓冲池存放了来自客户端的数据，准备转发给internet（发给TUN，然后通过iptable nat转发出去）
+		dstIP
+		data
+		......
+		
+	数据缓冲池sent to tunnel
+		该缓冲池存放了来自internet（通过iptable nat转发给TUN的internet数据），准备转发给对应的客户端
+		clientTunIP
+		clientDstIP
+		data
+		.......
+		
+	
+	
+	
+	
+	
