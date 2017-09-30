@@ -30,7 +30,7 @@ ofstream logger;
 
 void usage(char **argv);
 static int get_tunnel(const char *port);
-static int get_interface(const char * name);
+static int get_tun_interface(const char * name);
 int main(int argc, char **argv) {
 	const string FUN_NAME = "main";
 	if (argc < 3) {
@@ -48,13 +48,15 @@ int main(int argc, char **argv) {
 	LOG_LEVEL_SET = getLogLevel(str_LOGLEVEL);
 	//// append方法或+运算均可以,之前编译出错是由于函数模板分离编译所致,并非string+运算使用错误
 	//// currentLogFile = logfileNameBase.append(".").append(numToString(loground[cLoground]));	
-	currentLogFile = logfileNameBase + "." + numToString(loground[cLoground]);
+	currentLogFile = logfileNameBase + "." + numToString(loground[cLoground]); //第一个日志文件为$logfileNameBase.0
 	checkLogger(currentLogFile);
 
+	this_thread::sleep_for(chrono::milliseconds(500)); //// 暂停500毫秒
 	//// 初始化历史tun_ip分配记录
 	string assign_ip_recorder = conf_m["assign_ip_recorder"];
 	TunIPAddrPool tunip_pool(assign_ip_recorder);
 
+	this_thread::sleep_for(chrono::milliseconds(500)); //// 暂停500毫秒
 	//// 启动tunnel接口监听线程
 	//// 根据配置文件VPN_PORT设置,启动TunnelReceiver线程监听该端口
 	////
@@ -66,7 +68,7 @@ int main(int argc, char **argv) {
 		tunnel_port = f->second;
 		log(log_level::INFO, FUN_NAME, "test tunnel_port : " + tunnel_port);
 	}
-	log(log_level::DEBUG, FUN_NAME, "start thread_tunnel_recv");
+	log(log_level::DEBUG, FUN_NAME, "start thread_tunnel_recv. tunnel_port is:" + tunnel_port);
 	int socketfd_tunnel = get_tunnel(tunnel_port.c_str());
 	PacketPool tunnel_recv_packetPool;
 	std::thread thread_tunnel_recv(tunnelReceiver, socketfd_tunnel, std::ref(tunnel_recv_packetPool));
@@ -82,8 +84,8 @@ int main(int argc, char **argv) {
 	} else {
 		tun_ifname = f->second;
 	}
-	log(log_level::DEBUG, FUN_NAME, "start thread_tunIF_recv");
-	int fd_tun_interface = get_interface(tun_ifname.c_str());
+	log(log_level::DEBUG, FUN_NAME, "start thread_tunIF_recv. tun_ifname is:" + tun_ifname);
+	int fd_tun_interface = get_tun_interface(tun_ifname.c_str());
 	PacketPool tunIF_recv_packetPool;
 	std::thread thread_tunIF_recv(tunReceiver, fd_tun_interface, std::ref(tunIF_recv_packetPool));
 	thread_tunIF_recv.detach();
@@ -113,22 +115,26 @@ int main(int argc, char **argv) {
 	this_thread::sleep_for(chrono::seconds(10000));
 	log(log_level::ERROR, FUN_NAME, " vpn server exit.");
 }
-static int get_tunnel(const char * port) {
+
+//// 
+//// 启动服务端口socket
+////
+static int get_tunnel(const char * tunnel_port) {
 
 	// We use an IPv4 socket.
-	int tunnel = socket(AF_INET, SOCK_DGRAM, 0);
+	int fd_tunnel_socket = socket(AF_INET, SOCK_DGRAM, 0);
 	int flag = 1;
-	setsockopt(tunnel, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof (flag));
+	setsockopt(fd_tunnel_socket, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof (flag));
 	flag = 0;
 
 	// Accept packets received on any local address.
 	sockaddr_in addr;
 	memset(&addr, 0, sizeof (addr));
 	addr.sin_family = AF_INET;
-	addr.sin_port = htons(atoi(port));
+	addr.sin_port = htons(atoi(tunnel_port));
 
 	// Call bind(2) in a loop since Linux does not have SO_REUSEPORT.
-	while (bind(tunnel, (sockaddr *) & addr, sizeof (addr))) {
+	while (bind(fd_tunnel_socket, (sockaddr *) & addr, sizeof (addr))) {
 		if (errno != EADDRINUSE) {
 			return -1;
 		}
@@ -141,25 +147,30 @@ static int get_tunnel(const char * port) {
 	// Put the tunnel into non-blocking mode.
 	//fcntl(tunnel, F_SETFL, O_NONBLOCK);
 
-	return tunnel;
+	return fd_tunnel_socket;
 }
-static int get_interface(const char * name) {
+
+//// 
+//// 
+static int get_tun_interface(const char * tun_name) {
 	//int interface = open("/dev/net/tun", O_RDWR | O_NONBLOCK);
 	string FUN_NAME = "get_interface";
-	int interface = open("/dev/net/tun", O_RDWR);
+	int fd_interface_tun = open("/dev/net/tun", O_RDWR);
 	ifreq ifr;
 	memset(&ifr, 0, sizeof (ifr));
 	ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
-	strncpy(ifr.ifr_name, name, sizeof (ifr.ifr_name));
+	strncpy(ifr.ifr_name, tun_name, sizeof (ifr.ifr_name));
 
-	if (ioctl(interface, TUNSETIFF, &ifr)) {
-
+	if (ioctl(fd_interface_tun, TUNSETIFF, &ifr)) {
 		log(log_level::FATAL, FUN_NAME, "Cannot get TUN interface");
 		exit(1);
 	}
 
-	return interface;
+	return fd_interface_tun;
 }
+
+//// 
+////
 void usage(char **argv) {
 
 	printf("Usage: %s <config file name>\n"
@@ -170,5 +181,4 @@ void usage(char **argv) {
 			"BEFORE running this program. For more information, please\n"
 			"read the comments in the source code.\n\n", argv[0]);
 	exit(1);
-
 }
