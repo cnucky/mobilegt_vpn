@@ -426,47 +426,71 @@ string PeerClient::getPeer_deviceId() {
 
 	return peer_deviceId;
 }
+
+//// 
 string PeerClient::getPeer_tun_ip() {
 
 	return peer_tun_ip;
 }
+
+//// 
 string PeerClient::getPeer_internet_ip() {
 
 	return peer_internet_ip;
 }
+
+//// 
 int PeerClient::getPeer_internet_port() {
 
 	return peer_internet_port;
 }
+
+//// 
 void PeerClient::setPeer_deviceId(string deviceId) {
 	peer_deviceId = deviceId;
 }
+
+//// 
 void PeerClient::setPeer_internet_ip(string internet_ip) {
 	peer_internet_ip = internet_ip;
 }
+
+//// 
 void PeerClient::setPeer_internet_port(int internet_port) {
 	peer_internet_port = internet_port;
 }
+
+//// 
 void PeerClient::refreshRecentConnectTime() {
 
 	recentConnectTime = std::chrono::system_clock::now();
 }
+
+//// 
 std::chrono::system_clock::time_point PeerClient::getRecentConnectTime() {
 
 	return recentConnectTime;
 }
+
+//// 
 void PeerClient::increasePktCount_recv() {
 
 	pktCount_recv++;
 }
+
+//// 
 void PeerClient::increasePktCount_send() {
 
 	pktCount_send++;
 }
+
+//// 
 int PeerClient::getPktCount_send() const {
 
 	return pktCount_send;
 }
+
+//// 
 int PeerClient::getPktCount_recv() const {
 	return pktCount_recv;
 }

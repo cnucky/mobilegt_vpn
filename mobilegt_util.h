@@ -289,7 +289,7 @@ public:
  */
 class PacketPool {
 public:
-	const static int POOL_NODE_MAX_NUMBER = 2; //缓冲池最大节点数目
+	const static int POOL_NODE_MAX_NUMBER = 20; //缓冲池最大节点数目
 	PacketPool();
 	~PacketPool();
 	PacketNode* produce(); //得到一个用于接收网络数据报文的节点

@@ -31,7 +31,6 @@ ofstream logger;
 void usage(char **argv);
 static int get_tunnel(const char *port);
 static int get_interface(const char * name);
-
 int main(int argc, char **argv) {
 	const string FUN_NAME = "main";
 	if (argc < 3) {
@@ -44,8 +43,6 @@ int main(int argc, char **argv) {
 	//// 测试打印参数配置
 	PrintConfig(conf_m);
 
-	string assign_ip_recorder = conf_m["assign_ip_recorder"];
-	TunIPAddrPool tunip_pool(assign_ip_recorder);
 	logfileNameBase += conf_m["logfileNameBase"];
 	string str_LOGLEVEL = conf_m["LOG_LEVEL"];
 	LOG_LEVEL_SET = getLogLevel(str_LOGLEVEL);
@@ -53,6 +50,10 @@ int main(int argc, char **argv) {
 	//// currentLogFile = logfileNameBase.append(".").append(numToString(loground[cLoground]));	
 	currentLogFile = logfileNameBase + "." + numToString(loground[cLoground]);
 	checkLogger(currentLogFile);
+
+	//// 初始化历史tun_ip分配记录
+	string assign_ip_recorder = conf_m["assign_ip_recorder"];
+	TunIPAddrPool tunip_pool(assign_ip_recorder);
 
 	//// 启动tunnel接口监听线程
 	//// 根据配置文件VPN_PORT设置,启动TunnelReceiver线程监听该端口
@@ -112,7 +113,6 @@ int main(int argc, char **argv) {
 	this_thread::sleep_for(chrono::seconds(10000));
 	log(log_level::ERROR, FUN_NAME, " vpn server exit.");
 }
-
 static int get_tunnel(const char * port) {
 
 	// We use an IPv4 socket.
@@ -143,7 +143,6 @@ static int get_tunnel(const char * port) {
 
 	return tunnel;
 }
-
 static int get_interface(const char * name) {
 	//int interface = open("/dev/net/tun", O_RDWR | O_NONBLOCK);
 	string FUN_NAME = "get_interface";
@@ -161,7 +160,6 @@ static int get_interface(const char * name) {
 
 	return interface;
 }
-
 void usage(char **argv) {
 
 	printf("Usage: %s <config file name>\n"
