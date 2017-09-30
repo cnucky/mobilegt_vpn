@@ -1,0 +1,306 @@
+C++标准库头文件，不同的编译器默认路径不相同。
+Vc6.0一般在安装目录下的\VC98\INCLUDE目录，比如C:\Program Files (x86)\Microsoft Visual Studio\VC98\INCLUDE。
+Vs一般在位于$VSPATH\VC\include路径下面。
+gcc一般默认在 /usr/include目录下。
+
+Netbeans C++ unable to resolve identifier 无法解析标识符
+右击项目，选择 Code Assistance => Reparse Project
+如果是中文版的话，则是：选择 代码帮助 => 重新解析项目
+
+
+n my Ubuntu Netbeans 7.3 installation, I have a C++ project with C++11 marked as the standard in the C++ Compiler Options. When I try to include <chrono> it does not seem to make the std::chrono namespace available. When I open up this file to see what's wrong, I see everything greyed out but his first section:
+
+#ifndef _GLIBCXX_CHRONO
+#define _GLIBCXX_CHRONO 1
+
+#pragma GCC system_header
+
+#if __cplusplus < 201103L
+# include <bits/c++0x_warning.h>
+#else
+When I hover over the __cplusplus constant, to see how it was defined, it says it's defined as 199711L. Why is this? I clearly set the project C++ Standard to C++11.
+
+__cplusplus=199711L
+
+Go to Tools->Options
+Select C/C++ menu
+Select Code Assistance tab
+Select C++ Compiler tab
+In Macro Definitions list view, locate __cplusplus and change its value to 201103L
+Click OK button
+
+
+That's almost certainly a bad idea. The __cplusplus macro is defined by the compiler to indicate which version of the standard it supports. Changing it yourself is like trying to make your car go faster by pushing the needle on the speedometer to the right. – Keith Thompson Jun 7 '14 at 18:38
+1	 	
+In this case I know that the speedometer is wrong; Notice it's for the Code Assistance only! The code compiles just fine without the correction. If I print the macro, it shows 201103L as expected. – eigil Jun 8 '14 at 10:31
+  	 	
+I don't think so. The compiler chooses, based on command-line arguments, which version of the standard to support. -std=c++11 causes it to (a) support C++11-specific features, and (b) define __cplusplus as 201103L. Just changing the definition of __cplusplus won't cause the compiler to support C++11-specific features. (Unless NetBeans has some special handling for __cplusplus, which would be an odd way to do things.) – Keith Thompson Jun 8 '14 at 21:22
+  	 	
+For example, a program that depends on a C++-specific feature (like auto x = 42;) will not compile even with g++ -std=c++98 -D__cplusplus=201103L. I presume changing the value of __cplusplus to 201103L in NetBeans is equivalent to using -D__cplusplus=201103L, not to using -std=c++11. – Keith Thompson Jun 8 '14 at 21:45
+  	 	
+But perhaps I'm missing something. "Code assistance" is separate from the compiler, right? Setting the option for C++11 should tell the code assistant to set __cplusplus to 201103L. Is this a bug in NetBeans, and your suggestion a workaround for that bug? See also this question. – Keith Thompson Jun 8 '14 at 21:53
+
+----------------------------------------
+Hello NetBeans community! 
+
+I am glad this resource is available and after about a week of googling, I have decided to ask a hopefully simple question that I can not seem to find an answer for. 
+
+I currently am running Linux, NetBeans 8.0.2 with the g++ (GCC) 4.8.3 20140911 (Red Hat 4.8.3-7), and trying to create C++ applications. 
+
+Whenever I choose a new project, C++ application, it always defaults to the 199711L compiler. 
+
+I can go to the properties for every application I build and manual change the compiler to "C++11]" (there are 3 option, "default", which is the old 199711L I think, "C++98", and "C++11"). 
+
+When I go to here: 
+
+Tools -> Options -> C/C++ -> Code Assistance -> C++ -> Macro Definitions, it shows: 
+__cplusplus=199711L 
+
+My question is how do I globally set all projects/applications to utilize at least "C++11", rather than 199711L? 
+
+Any help for setting the default would be greatly appreciated. Thank you. 
+
+If you need any info or specifics please just ask.
+-----------------------------------------------------
+Hi histamineblkr, 
+
+NB 8.1 new project wizard has combo-box to select language standard. 
+The list "Tools -> Options -> C/C++ -> Code Assistance -> C++ -> Macro 
+Definitions" contains default compiler macros definitions. I.e. macros definitions that used 
+by compiler if there is no compiler options that change macros (important flags). 
+If compilation unit uses any important flag, IDE will use another list 
+of compiler macros definitions. 
+For example the flag "-std=c++11" changes macros "__cplusplus=201103L". 
+You can see real compiler macros definitions for opened in editor file 
+by project pop-up menu item: 
+"Code Assistance->Dump C/C++ -> Code Model Diagnostic -> Preprocessor 
+States". 
+
+Alexander 
+
+
+
+========================
+首先说string的头文件
+
+1、<string>
+包装了std的C++头文件
+
+2、<string.h>
+旧的C头文件
+
+3、<cstring.h>
+旧C头文件的std版本,切记,这不是cstring的头文件
+
+详见effective c++ 的第49条
+
+再说cstring的头文件
+注：VC9编译环境下
+1、<atlstr.h>
+非MFC版本，控制台程序就用这个
+
+2、<afxstr.h>
+MFC版本，需要链接MFC的dll或静态库。网上很多人说要包含<afx.h>,<afx.h>包含的东西就比较多了CObject及其派生类，还有文件类、时间类、异常类、字符串类等等（700多行的位置包含了afxstr.h）,如果仅仅需要cstring的话,包含<afxstr.h>就够了。
+
+<afx.h>中的预处理
+#ifdef _DLL
+#ifndef _AFXDLL
+#error Building MFC application with /MD[d] (CRT dll version) requires MFC shared dll version. Please #define _AFXDLL or do not use /MD[d]
+#endif
+#endif
+
+<afxstr.h>中的预处理
+#ifndef _AFX
+#error afxstr.h can only be used in MFC projects.  Use atlstr.h
+#endif
+ 注意上面的#error,大意就是这个头文件是在MFC工程里用的。要么改用<atlstr.h>，要么在项目->属性->常规里设置为在共享的dll中使用MFC.
+ 
+
+=============================
+NetBeans的情况
+
+NetBeans IDE有C/C++支持，该模块的名字叫做“CND”（就跟Eclipse的C/C++支持有项目名叫做CDT一样）。它从8.1版本可以用Clang的前端来提供C/C++源码的语法分析支持，可以通过 -J-Dapt.use.clank=true 开启该支持。（注意是clank而不是clang喔，下面马上就要说为啥了）
+
+但是！有趣的是，NetBeans是一个用Java写的IDE，而Clang是用C++写的。如果一个IDE只是在用户点击“编译”按钮时去调用编译器，那么这个交互会很简单：基本上等于让IDE直接执行一个命令行命令去调用编译器即可。但像NetBeans这种带有正确的语法高亮以及一定程度的语法分析、自动补全功能的IDE，在用户编辑代码的过程中就已经需要跟语法分析、语义分析器以及代码的元数据打交道，如果这些交互每次都通过调用外部程序、或者通过JNI来从Java调用C++写的功能的话，效率会颇为低下。所以NetBeans是如何使用Clang的？
+
+用某种方式把Clang的C++源码机械式翻译成了Java源码，然后做一些人工修正/裁剪…得到的结果就是一个跟Clang前端完全对应的Java版代码。这个项目的名字叫做 Clank / JClank。如果大家在NetBeans CND的二进制发布版里看到名字里有"clank"字样的模块，说的就是这个项目了。
+
+由于翻译是尽可能机械完成的，所以Clang升级的话这边的Clank / JClank也可以跟着一起升级——把新版本的Clang重新翻译一遍就好。这就不怕被C++新标准的各种新繁杂功能拖着疲于奔命。
+
+肯定有同学会觉得这很神奇…咋会选用这么奇葩的解决方案？
+
+据说NetBeans CND的开发组是有考虑过很多种解决方案的，其中当然也包括比较常规的通过JNI来调用libClang / libTooling库里的Clang功能，但最后评估下来觉得NetBeans原本的C/C++支持的卖点之一就是parser的解析速度快，如果parser换成用Clang而性能下降得太厉害的话就得不偿失了。所以评估下来反而是把Clang源码翻译为Java，避开JNI开销，这样的方案的总体开销较小。
+
+在换成用Clang之前，NetBeans的C/C++支持其实有一个自己写的parser，是基于魔改过的ANTLR 2.x系生成器来实现的。它为当时NetBeans的定位而优化，通过牺牲少量准确性来大幅提升解析速度——当时NB的定位觉得说IDE的parser不需要像编译器一样准确，反正不是用来生成目标代码。后来NetBeans CND想把C/C++支持做得更完善，原有的parser就有点吃力了，例如说它所牺牲的准确性使得它无法完全准确地报告符号的find references的结果，快是快但是难以在它的基础上同时改进准确度和跟上C++新规范（11/14/17）的功能。所以后来就考虑用Clang来替代原先的parser。
+
+补充：2017年的EuroLLVM上会有关于Clank的演讲：Clank: Java-port of C/C++ compiler frontend
+
+
+Netbeans C++ 编译选项
+1.C++编译选项
+此处可加上 -pthread -std=c++11
+
+2.连接器
+此处可包括库的选项,如 -lcryptopp
+不能把-lcryptopp放到C++编译选项,否则编译出错,-l参数必须是在g++编译参数的最后
+
+https://www.cryptopp.com/wiki/Linux#Compiling_and_Linking
+To compile and link the program issue the following. There are two points to observe when compiling and linking. First, use g++ rather than gcc (see GCC's Compiling C++ Programs). Second the library directive (-l) is the last argument to g++. Note: on some systems (for example, Fedora), the library option might be -lcrypto++.
+
+g++ -g3 -ggdb -O0 -Wall -Wextra -Wno-unused -o test test.cpp -lcryptopp
+-Wall and -Wextra turn on most warnings since its always a good idea to let static analysis tools catch mistakes early. (For reasons only known to the free software world, -Wall only turns on some warnings, and not all warnings as the name implies.) -Wno-unused increases the signal to noise ratio because Crypto++ has a lot of unused parameters, which is par for the course for an object oriented program with lots of interfaces.
+If -Wall and -Wextra are producing too much noise (even after -Wno-unused), compile with -fdiagnostics-show-option to locate which additional warnings to suppress. See Options to Request or Suppress Warnings.
+The -g3 switch adds maximum debug information to the executable test and is not required (note that -g is equivalent to -g2). The -ggdb adds gdb extensions which might prove useful when debugging non-trivial programs under gdb which support extensions. See Options for Debugging Your Program or GCC. If you are adding -ggdb, you might consider adding -fno-omit-frame-pointer so that stack traces from the field are easier to walk.
+-O0 disables all optimizations, so even #define's are available to the debugger. Usually, optimizations such as these are taken by the optimizer, and the debugger will display something similar to 'value optimized out'. Note that -O0 is the default optimization level.
+-o specifies the output file name. -l specifies the library. When using -l, we only need to specify the base library name. ld will prepend lib and append .a (or .so) when searching for the library (reference the ld man pages around line 6200). Finally, the -l option location is significant (libraries must be specified last).
+
+======================
+编译错误，缺省参数放在申明处，但定义处不能出现重复
+error: default argument given for parameter 1
+
+I'm getting this error message with the code below:
+
+class Money {
+public:
+    Money(float amount, int moneyType);
+    string asString(bool shortVersion=true);
+private:
+    float amount;
+    int moneyType;
+};
+
+You are probably redefining the default parameter in the implementation of the function. It should only be defined in the function declaration.
+
+//bad (this won't compile)
+string Money::asString(bool shortVersion=true){
+}
+
+//good (The default parameter is commented out, but you can remove it totally)
+string Money::asString(bool shortVersion /*=true*/){
+}
+
+//also fine, but maybe less clear as the commented out default parameter is removed
+string Money::asString(bool shortVersion){
+}
+
+
+========================================
+编译错误
+
+
+问题简述
+近来 C++ 用到单例模式，（单例模式是啥不说了，网上大把的资料），结果编译的时候遇到 undefined reference to `XXX' XXX 是单例模式中的那个静态私有指针。结果是由于变量没有初始化引起。虽然解决之后听起来很小白，但着实用了很多时间，所以决定做个记录。
+
+来龙去脉
+写了个单例模式，大概这样
+[cpp] view plain copy
+//Single.h  
+class Single（）{  
+public:  
+    static Single * GetInstance();  
+private:  
+    static Single * instance;  
+    Single(){};  
+}  
+
+[cpp] view plain copy
+//Single.cc  
+  
+Single*  
+Single::GetInstance(){  
+    if(instance == NULL){  
+        instance = new Single();  
+    }  
+    return instance;  
+}  
+其他部分略去不表，结果编译时报错
+[cpp] view plain copy
+undefined reference to `instance'   
+百思不得其解啊，怎么能找不到呢，很清楚的声明了啊
+
+声明 != 定义
+声明：是的名字为程序所知
+定义：负责创建与名字关联的实体（摘自 C++ primer）
+
+按照字面意思理解似乎声明完了就不应该报 undefine reference 错才对，但考虑到程序在定义是才给变量分配内存，所以理解为指向类实例的指针只有定义过了才能使用
+
+解决方法
+这就很简单了，在 Single.cc 中加上
+[cpp] view plain copy
+Single* Single：：instance = NULL；  
+也就是定义 instance 变量就行。不要怀疑，private 类型的 static 变量也可以这么定义。 static 变量其实不属于任何类。
+
+===================================
+今天晚上编译模板，将声明和实现分离开了，结果总是报“undefined reference to”的错误，调试了好久，也没发现代码中有什么错误的地方，就写了个简单的模板类，还是发现报同样的错误，郁闷了下，最后发现把声明和实现写在一起就不会出现错误了，又到晚上搜了下，结果还是真的是关于声明和实现分开的关系。
+
+原因是由于GCC不支持模板类的分离编译，只能声明和实现写在一起编译了。
+
+[cpp] view plain copy
+#ifndef A_H_INCLUDED  
+#define A_H_INCLUDED  
+template <class Type>  
+class A{  
+    Type i;  
+public:  
+    A():i(0) { }  
+    A(const Type& _i):i(_i) { }  
+    Type& pop();  
+    ~A(){ }  
+};  
+#endif // QUEUE_H_INCLUDED  
+ 
+
+[cpp] view plain copy
+#include "A.h"  
+template <class Type>  
+Type& A<Type>::pop()  
+{  
+    return i;  
+}  
+ 
+
+这样就会报错，是由于GCC编译器不支持模板类的分离编译 
+
+[cpp] view plain copy
+#ifndef A_H_INCLUDED  
+#define A_H_INCLUDED  
+template <class Type>  
+Type& A<Type>::pop()  
+{  
+    return i;  
+}  
+template <class Type>  
+class A{  
+    Type i;  
+public:  
+    A():i(0) { }  
+    A(const Type& _i):i(_i) { }  
+    Type& pop();  
+    ~A(){ }  
+};  
+#endif // A_H_INCLUDED  
+ 
+
+这样就不会报错了，以后在GCC写模板类的时候要记得将声明和实现放在一起哦！！！
+
+C++函数模板的编译方式
+
+目前支持函数模板分离编译的编译器相当稀少，VC和g++都不支持。
+模板的文件组织两种方法(<<The C++ programming language>>)：
+第一种 包含编译方式：
+实现和声明放在一个编译单位中，这样这个模板定义所依靠的一些东西就被带到了包含这个编译单位的文件里。坏处是：增大编译器的处理信息量，而且用户会意外的依赖了原本只是为定义这个模板而引进的东西。解决方案：使用名字空间、避免宏定义、以及一般性的减少包含进来的信息量，可以减小这种危害影响。
+
+第二种 分离编译模式：
+这种处理就和一般的非inline函数处理一样。不过这里需要用到export关键字了，export关键字的作用就是告诉编译器这个东西别的编译单位可以访问；否则按照一般规则，任何地方使用模板，都要求其定义在作用域中。这种方法的优点是：思路清晰。缺点：因为模板被单独编译了，因此在需要时候，找到合适的定义成了实现者（编译器的责任），要实现者在需要时候找到唯一的一个版本，想想编译器这家伙可就头疼了，因此很少编译器做到这一点。
+
+第三种 显式实例化声明：
+标准C++提供了显式实例化声明来帮助程序员控制模板实例化发生的时间。在显式实例化声明中，关键字template后面是函数模板实例的声明，其中显式地指定了模板实参。下例中提供了sum(int* , int)的显式实例化声明：
+
+template<class Type> Type sum( Type op1, int op2 ) {} // 函数模板sum的定义必须给出
+// 显式实例化声明
+template int* sum< int* >( int*, int );   
+    
+    该显式实例化声明要求用模板实参int*实例化模板sum()。对于给定的函数模板实例，显式实例化声明在一个程序中只能出现一次。
+总结了上面的两种情况后，我们可以看到，第一种在编译时候，任何需要这个模板的地方都引用了这个模板定义，因此编译器据此来优化，去掉冗余的版本。第二种方法就给实现者（编译器）增加了负担，不是去掉冗余的版本，而是在需要时找到这个唯一版本。
+
+函数模板实例化：如果一个函数模板在好几个文件中都有实例化调用，那么我们就称这每一个实例化调用处为模板的一个实例化点。在这若干个实例化点处，对于同一种实例化调用，编译器都有可能进行实例化。一般来说编译器会在这种实例化所有的点中只选择一个实例化点处进行实例化，其他点处的调用都使用该点实例化后的具体函数定义。但是一些编译器（大部分都是老式的编译器）会在每一个实例化点处都进行实例化，生成一个具体的函数定义，然后在这些实例化后的具体定义中选择一个作为这种实例化调用最终的实例化具体定义，其他的具体定义视而不见。这样做的效果虽然同先选择一个实例化点再进行实例化，然后其他实例化调用处使用该点定义的方式一样，但是会使得编译的效率极差，而且随着程序的修改，如果该模板这种实例化调用用的越来越多，那么实例化出来的被视而不见的定义就越来越多，程序的体积就越来越大，越来越臃肿。因此C++标准中加入了显式实例化，使得程序编写者可以通过显式实例化声明来通知编译器：该在此处进行这种实例化，别的地方就不用了。以避免前面那种因编译器不够智能带来的问题。

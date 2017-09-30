@@ -1,3 +1,5 @@
+使用UDP协议，服务器端不用维护连接状状态使用sendto()和recvfrom();
+
 sudo ip tuntap add dev tun99 mode tun
 
 tun99     Link encap:UNSPEC  HWaddr 00-00-00-00-00-00-00-00-00-00-00-00-00-00-00-00  

@@ -1,0 +1,123 @@
+ubuntu@ubuntu:~/vpnserver$ netstat -rn
+Kernel IP routing table
+Destination     Gateway         Genmask         Flags   MSS Window  irtt Iface
+0.0.0.0         222.16.5.254    0.0.0.0         UG        0 0          0 eth0
+10.77.0.0       0.0.0.0         255.255.0.0     U         0 0          0 tun0
+10.88.1.2       0.0.0.0         255.255.255.255 UH        0 0          0 tun1
+222.16.4.0      0.0.0.0         255.255.254.0   U         0 0          0 eth0
+
+Flags：多个不同标识的意义：
+
+U (route is up)：该路由是有效的； 
+H (target is a host)：目标是主机而非网域； 
+G (use gateway)：需要透过外部的主机 (gateway) 来转递封包（一般指向默认网关）； 
+R (reinstate route for dynamic routing)：使用动态路由时，恢复路由资讯的旗标； 
+D (dynamically installed by daemon or redirect)：已经由服务或转 port 功能设定为动态路由 ;
+M (modified from routing daemon or redirect)：路由已经被修改了； 
+! (reject route)：这个路由将不会被接受(用来抵挡不安全的网域).
+
+ubuntu@ubuntu:~/vpnserver$ sudo iptables -t nat -L
+Chain PREROUTING (policy ACCEPT)
+target     prot opt source               destination         
+
+Chain INPUT (policy ACCEPT)
+target     prot opt source               destination         
+
+Chain OUTPUT (policy ACCEPT)
+target     prot opt source               destination         
+
+Chain POSTROUTING (policy ACCEPT)
+target     prot opt source               destination         
+MASQUERADE  all  --  10.77.1.0/24         anywhere            
+MASQUERADE  all  --  10.88.1.0/24         anywhere            
+
+iptables中snat和MASQUERADE的区别
+
+　　iptables中可以灵活的做各种网络地址转换（NAT）
+　　网络地址转换主要有两种：snat和DNAT
+　　snat是source network address translation的缩写
+　　即源地址目标转换
+　　比如，多个PC机使用ADSL路由器共享上网
+　　每个PC机都配置了内网IP
+　　PC机访问外部网络的时候，路由器将数据包的报头中的源地址替换成路由器的ip
+　　当外部网络的服务器比如网站web服务器接到访问请求的时候
+　　他的日志记录下来的是路由器的ip地址，而不是PC机的内网ip
+　　这是因为，这个服务器收到的数据包的报头里边的“源地址”，已经被替换了
+　　所以叫做snat，基于源地址的地址转换
+　　DNAT是destination network address translation的缩写,即目标网络地址转换
+　　典型的应用是，有个web服务器放在内网配置内网ip，前端有个防火墙配置公网ip
+　　互联网上的访问者使用公网ip来访问这个网站
+　　当访问的时候，客户端发出一个数据包
+　　这个数据包的报头里边，目标地址写的是防火墙的公网ip
+　　防火墙会把这个数据包的报头改写一次，将目标地址改写成web服务器的内网ip
+　　然后再把这个数据包发送到内网的web服务器上
+　　这样，数据包就穿透了防火墙，并从公网ip变成了一个对内网地址的访问了,即DNAT，基于目标的网络地址转换
+
+　　MASQUERADE，地址伪装，在iptables中有着和snat相近的效果，但也有一些区别
+　　但使用snat的时候，出口ip的地址范围可以是一个，也可以是多个，例如：
+　　如下命令表示把所有10.8.0.0网段的数据包snat成192.168.5.3的ip然后发出去
+　　iptables -t nat -A POSTROUTING -s 10.8.0.0/255.255.255.0 -o eth0 -j snat --to-source 192.168.5.3
+　　如下命令表示把所有10.8.0.0网段的数据包snat成192.168.5.3/192.168.5.4/192.168.5.5等几个ip然后发出去
+　　iptables -t nat -A POSTROUTING -s 10.8.0.0/255.255.255.0 -o eth0 -j snat --to-source 192.168.5.3-192.168.5.5
+　　这就是snat的使用方法，即可以NAT成一个地址，也可以NAT成多个地址
+　　但是，对于snat，不管是几个地址，必须明确的指定要snat的ip
+　　假如当前系统用的是ADSL动态拨号方式，那么每次拨号，出口ip192.168.5.3都会改变
+　　而且改变的幅度很大，不一定是192.168.5.3到192.168.5.5范围内的地址
+　　这个时候如果按照现在的方式来配置iptables就会出现问题了
+　　因为每次拨号后，服务器地址都会变化，而iptables规则内的ip是不会随着自动变化的
+　　每次地址变化后都必须手工修改一次iptables，把规则里边的固定ip改成新的ip
+　　这样是非常不好用的
+　　MASQUERADE就是针对这种场景而设计的，他的作用是，从服务器的网卡上，自动获取当前ip地址来做NAT
+　　比如下边的命令：
+　　iptables -t nat -A POSTROUTING -s 10.8.0.0/255.255.255.0 -o eth0 -j MASQUERADE
+　　如此配置的话，不用指定snat的目标ip了
+　　不管现在eth0的出口获得了怎样的动态ip，MASQUERADE会自动读取eth0现在的ip地址然后做snat出去
+　　这样就实现了很好的动态snat地址转换
+
+ubuntu@ubuntu:~/vpnserver$ sudo ifconfig -a
+eth0      Link encap:Ethernet  HWaddr fa:16:3e:d6:71:85  
+          inet addr:222.16.4.76  Bcast:222.16.5.255  Mask:255.255.254.0
+          inet6 addr: fe80::f816:3eff:fed6:7185/64 Scope:Link
+          UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+          RX packets:177587 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:79639 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1000 
+          RX bytes:27976097 (27.9 MB)  TX bytes:29166591 (29.1 MB)
+
+lo        Link encap:Local Loopback  
+          inet addr:127.0.0.1  Mask:255.0.0.0
+          inet6 addr: ::1/128 Scope:Host
+          UP LOOPBACK RUNNING  MTU:65536  Metric:1
+          RX packets:41774 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:41774 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1 
+          RX bytes:455363840 (455.3 MB)  TX bytes:455363840 (455.3 MB)
+
+tun0      Link encap:UNSPEC  HWaddr 00-00-00-00-00-00-00-00-00-00-00-00-00-00-00-00  
+          inet addr:10.77.1.254  P-t-P:10.77.1.254  Mask:255.255.255.255
+          UP POINTOPOINT NOARP MULTICAST  MTU:1500  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:0 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:500 
+          RX bytes:0 (0.0 B)  TX bytes:0 (0.0 B)
+
+tun1      Link encap:UNSPEC  HWaddr 00-00-00-00-00-00-00-00-00-00-00-00-00-00-00-00  
+          inet addr:10.88.1.1  P-t-P:10.88.1.2  Mask:255.255.255.255
+          UP POINTOPOINT RUNNING NOARP MULTICAST  MTU:1500  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:0 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:500 
+          RX bytes:0 (0.0 B)  TX bytes:0 (0.0 B)
+
+ubuntu@ubuntu:~/vpnserver$ 
+
+dumpcap 输出文件权限问题
+dumpcap一般需要root权限，输出文件所在文件夹必须属于root，例如：
+       dumpcap -i tun0 -w data/test2.pcap
+先chown root:root data
+  即可解决"dumpcap: The file to which the capture would be saved ("test.pcap") could not be opened: Permission denied. "问题。
+
+dumpcap不能查看.pcap文件，需使用tshark，例如：
+      sudo tshark -r /home/ubuntu/vpnserver/pcap_data/66aed7a1/1_00001_20170928150036.pcap
+	  
+	  
