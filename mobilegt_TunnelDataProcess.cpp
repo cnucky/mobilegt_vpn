@@ -8,7 +8,6 @@
 
  */
 int build_parameters(char *parameters, int size, const string tun_ip, const map<string, string> & conf_m);
-
 int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interface, int socketfd_tunnel, TunIPAddrPool & tunip_pool, const map<string, string> & conf_m) {
 	const string FUN_NAME = "tunnelDataProcess";
 	EncryptDecryptHelper * aes_helper = EncryptDecryptHelper::getInstance();
@@ -18,7 +17,6 @@ int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interfa
 	PeerClientTable * ptr_peerClientTable = PeerClientTable::getInstance();
 	while (true) {
 		PacketNode* pkt_node = tunnelReceiver_packetPool.consume();
-
 		if (pkt_node == NULL) {
 			//阻塞等待通知有数据
 			//std::unique_lock <std::mutex> lck(mtx);
@@ -135,7 +133,6 @@ int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interfa
 //	"  -d <address> for the domain name server\n"
 
 //m,<MTU> a,<PRIVATE_ADDR>,32 <d>,<DNS_ADDR> r,<0.0.0.0>,<0>
-
 int build_parameters(char *parameters, int size, const string tun_ip, const map<string, string> & conf_m) {
 	// Well, for simplicity, we just concatenate them (almost) blindly.
 	int offset = 0;

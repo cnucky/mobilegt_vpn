@@ -12,7 +12,6 @@
  * 
  * 
  */
-
 /**
  * 
  * @param fd_tun_interface
@@ -31,6 +30,7 @@ int tunReceiver(int fd_tun_interface, PacketPool & tunIF_recv_packetPool) {
 			//没有空闲节点
 			//告警,缓冲池满,没有多余的空闲节点
 			//暂停100毫秒？
+			log(log_level::WARN, FUN_NAME, "tunIF_recv_packetPool.produce() is NULL.");
 			this_thread::sleep_for(chrono::milliseconds(100)); //std::this_thread;std::chrono;
 			continue; //进入下一次循环而不进入读取网络数据报文的阻塞调用
 		}

@@ -1,5 +1,4 @@
 #include "mobilegt_util.h"
-
 /*
  * tunnel接收到的数据是来自客户端的请求数据,
  * 1. 连接验证命令数据,验证约定的密钥,然后将TUN私有地址、DNS信息、路由信息等配置信息返回手机客户端
@@ -29,6 +28,7 @@ int tunnelReceiver(int fd_tunnel, PacketPool & tunnel_recv_packetPool) {
 			//没有空闲节点
 			//告警,缓冲池满,没有多余的空闲节点
 			//暂停100毫秒
+			log(log_level::WARN, FUN_NAME, "tunnel_recv_packetPool.produce() is NULL.");
 			this_thread::sleep_for(chrono::milliseconds(100)); //std::this_thread;std::chrono;
 			continue; //进入下一次循环而不进入读取网络数据报文的阻塞调用
 		}

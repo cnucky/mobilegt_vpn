@@ -70,6 +70,7 @@ int main(int argc, char **argv) {
 	}
 	log(log_level::DEBUG, FUN_NAME, "start thread_tunnel_recv. tunnel_port is:" + tunnel_port);
 	int socketfd_tunnel = get_tunnel(tunnel_port.c_str());
+	//int max_node_number=200;
 	PacketPool tunnel_recv_packetPool;
 	std::thread thread_tunnel_recv(tunnelReceiver, socketfd_tunnel, std::ref(tunnel_recv_packetPool));
 	thread_tunnel_recv.detach();
@@ -154,7 +155,7 @@ static int get_tunnel(const char * tunnel_port) {
 //// 
 static int get_tun_interface(const char * tun_name) {
 	//int interface = open("/dev/net/tun", O_RDWR | O_NONBLOCK);
-	string FUN_NAME = "get_interface";
+	string FUN_NAME = "get_tun_interface";
 	int fd_interface_tun = open("/dev/net/tun", O_RDWR);
 	ifreq ifr;
 	memset(&ifr, 0, sizeof (ifr));
