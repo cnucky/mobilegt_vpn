@@ -44,13 +44,14 @@ int tunnelReceiver(int fd_tunnel, PacketPool & tunnel_recv_packetPool) {
 			string ip = inet_ntop(AF_INET, (void *) &peer_addr.sin_addr, IPdotdec, 16);
 			int port = ntohs(peer_addr.sin_port);
 			log(log_level::DEBUG, FUN_NAME, "recv fd_tunnel length:" + to_string(length) + " from " + ip + ":" + to_string(port));
+			pkt_node->pkt_internetAddr = ip;
+			pkt_node->pkt_internetPort = port;
 			if (packet[0] == 0) {
 				//process control messages
 				//接收线程只负责接收数据，由数据处理线程检查约定密钥,正确才发送响应报文,记录该客户端和实际互联网地址对应关系
 				//检查客户端地址是否在黑名单中
 				//TODO:黑名单限制暂无实现
-				pkt_node->pkt_internetAddr = ip;
-				pkt_node->pkt_internetPort = port;
+
 				dropPacket = false;
 			} else {
 				//process data messages

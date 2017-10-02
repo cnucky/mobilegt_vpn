@@ -24,21 +24,39 @@ int bytesToInt(const byte * bytes, int size /*= 4*/) {
 	addr |= ((bytes[0] << 24) & 0xFF000000);
 	return addr;
 }
+
+//EncryptDecryptHelper
+//必须加上初始化,否则编译会在使用到该成员变量的地方提示undefine reference to single_Instance的错误
+EncryptDecryptHelper * EncryptDecryptHelper::single_Instance = NULL;
+EncryptDecryptHelper::EncryptDecryptHelper() {
+	//构造函数是私有的  
+	aesEncryption.SetKey(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
+	aesDecryption.SetKey(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
+}
+
+//// 
+//// 日志级别类型转换处理:字符串到enum类型处理
+////
 log_level getLogLevel(string str_loglevel) {
-	log_level ll = DEBUG;
+	log_level ll = log_level::DEBUG;
 	if (str_loglevel == "DEBUG")
 		ll = log_level::DEBUG;
 	else if (str_loglevel == "INFO")
-		ll = INFO;
+		ll = log_level::INFO;
 	else if (str_loglevel == "WARN")
-		ll = WARN;
+		ll = log_level::WARN;
 	else if (str_loglevel == "ERROR")
-		ll = ERROR;
+		ll = log_level::ERROR;
 	else if (str_loglevel == "FATAL")
-		ll = FATAL;
+		ll = log_level::FATAL;
 
 	return ll;
 }
+
+//// 
+//// 日志方法用到的currentLogFile也是个全局变量
+//// 全局变量,日志操作相关的两个锁变量
+//// 
 mutex mtx_log; //mtx.lock(),mtx.unlock()
 mutex mtx_checklog;
 void log(log_level ll, string fun_name, string log_str, bool checkLogFile) {
@@ -79,6 +97,7 @@ void log(log_level ll, string fun_name, string log_str, bool checkLogFile) {
 	}
 }
 
+//// 
 //// 该方法检测日志文件是过大,过大则round robin处理
 //// 每个日志文件最大10*1024*1024即10M,超过则写入下一个日志文件
 //// 
@@ -104,36 +123,28 @@ void checkLogger(string currentLogFile) {
 	mtx_checklog.unlock();
 }
 
-//EncryptDecryptHelper
-//必须加上初始化,否则编译会在使用到该成员变量的地方提示undefine reference to single_Instance的错误
-EncryptDecryptHelper * EncryptDecryptHelper::single_Instance = NULL;
-EncryptDecryptHelper::EncryptDecryptHelper() {
-	//构造函数是私有的  
-	aesEncryption.SetKey(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
-	aesDecryption.SetKey(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
-}
-
 //// 
 //// class PacketPool
+//// 构造函数
+//// 报文缓冲池, 构造初始化构建分配POOL_NODE_MAX_NUMBER个缓冲节点用于存放数据
 PacketPool::PacketPool() {
 	const string FUN_NAME = "PacketPool";
 	log(log_level::DEBUG, FUN_NAME, "packet pool constructor.");
 	for (int i = 0; i < POOL_NODE_MAX_NUMBER; i++) {
 		ptr_pktNodePool[i] = new PacketNode(i);
-		queue_producer.push(i);
-		//queue_producer.push(ptr_pktNodePool[i]->index);
+		queue_producer.push(i); // 即:queue_producer.push(ptr_pktNodePool[i]->index);
 	}
 
 }
 
 //// 
+//// class PacketPool
+//// 析构函数,回收构造是分配的POOL_NODE_MAX_NUMBER个缓冲报文节点
 //// 
 PacketPool::~PacketPool() {
-
 	for (int i = 0; i < POOL_NODE_MAX_NUMBER; i++) {
 		delete ptr_pktNodePool[i];
 	}
-
 }
 
 //// 得到一个用于接收网络数据报文的节点
@@ -151,13 +162,14 @@ PacketNode* PacketPool::produce() {
 		return NULL;
 }
 
-//// 节点已接收完网络数据报文,加入待处理队列
+//// 结点已接收完网络数据报文,加入待处理队列
 void PacketPool::produceCompleted(PacketNode * const pkt_node) {
 	mtx_queue_consumer.lock();
 	queue_consumer.push(pkt_node->index);
 	mtx_queue_consumer.unlock();
 	produce_cv.notify_all();
 }
+//// 结点接收的数据为空或用于接收数据的结点不需要接收数据,回收结点用于下次接收
 void PacketPool::produceWithdraw(PacketNode * const pkt_node) {
 	PacketPool::consumeCompleted(pkt_node);
 }
@@ -186,71 +198,16 @@ void PacketPool::consumeCompleted(PacketNode * const pkt_node) {
 	consume_cv.notify_all(); // 条件变量,唤醒所有线程.
 }
 
-////
-//// TunIPAddrPool
-////
-string TunIPAddrPool::assignTunIPAddr(string deviceId) {
-	const string FUN_NAME = "TunIPAddrPool::assignTunIPAddr";
-	mtx_tunaddr_pool.lock();
-	string tun_ip;
-	auto f = umap_deviceId_tunip.find(deviceId);
-	if (f == umap_deviceId_tunip.end()) {
-		log(log_level::DEBUG, FUN_NAME, "cannot find a assigned tun ip for deviceId[" + deviceId + "]");
-		//// #ip_prefix.#ipindex2.#ipindex1
-		//// example: 10.77.0.1 10.77.0.2 10.77.0.3 ...
-		string newip = "";
-		if (!exceedScope) {
-			newip = ip_prefix + "." + to_string(ip_index2) + "." + to_string(ip_index1);
-			log(log_level::DEBUG, FUN_NAME, "assigned tun_ip is:[" + newip + "] current ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
-			ip_index1++; //所有已分配的ip再加1为第一个可分配IP
-			if (ip_index1 > IP_INDEX1_MAX) {
-				ip_index2++;
-				ip_index1 = 1;
-			}
-			if (ip_index2 == IP_INDEX2_MAX && ip_index1 == IP_INDEX1_MAX) {
-				log(log_level::FATAL, FUN_NAME, "exceed ip_index1 & ip_index2. current ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
-				exceedScope = true;
-			}
-
-			umap_deviceId_tunip[deviceId] = newip;
-			umap_tunip_deviceId[newip] = deviceId;
-			//// update assign_ip_recorder
-			ofstream outfile(assign_ip_recorder.c_str(), ios::app);
-			streampos sp = outfile.tellp();
-			if (sp <= 0)
-				outfile << "##ip_prefix.#ip_index2.#ip_index1=#deviceId" << endl;
-			outfile << newip << "=" << deviceId << endl;
-			outfile.close();
-		} else {
-			log(log_level::ERROR, FUN_NAME, "cannot assign tun_ip. current ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
-		}
-		tun_ip = newip;
-	} else {
-		log(log_level::DEBUG, FUN_NAME, "find a assigned tun ip.");
-		tun_ip = f->second;
-	}
-	mtx_tunaddr_pool.unlock();
-	return tun_ip;
-}
-
-//// 
-string TunIPAddrPool::queryTunIPAddrByDeviceId(string deviceId) {
-	string tun_ip;
-	auto f = umap_deviceId_tunip.find(deviceId);
-	if (f == umap_deviceId_tunip.end()) {
-		;
-	} else {
-		tun_ip = f->second;
-	}
-	return tun_ip;
-}
 
 //// 
 TunIPAddrPool::TunIPAddrPool(string netaddr, string netmask) : pool_netaddr(netaddr), pool_netmask(netmask) {
 	//// 未实现
 }
 
+//// 
+//// 构造函数
 //// 读取assign_ip_recorder文件，初始化历史分配情况，保证同样的deviceId与分配的IP有一一对应关系
+//// 
 TunIPAddrPool::TunIPAddrPool(string assign_ip_recorder) : assign_ip_recorder(assign_ip_recorder) {
 	mtx_tunaddr_pool.lock();
 	const string FUN_NAME = "TunIPAddrPool->TunIPAddrPool";
@@ -298,9 +255,72 @@ TunIPAddrPool::TunIPAddrPool(string assign_ip_recorder) : assign_ip_recorder(ass
 }
 
 //// 
-void TunIPAddrPool::cacheHistoryLog(string logFileName) {
-
+void TunIPAddrPool::hibernateHistoryLog(string logFileName) {
+	//未实现
 }
+
+////
+//// TunIPAddrPool
+//// 每次分配新的tunip给新的deviceId后立即将分配记录写入分配记录文件
+//// 
+string TunIPAddrPool::assignTunIPAddr(string deviceId) {
+	const string FUN_NAME = "TunIPAddrPool::assignTunIPAddr";
+	mtx_tunaddr_pool.lock();
+	string tun_ip;
+	auto f = umap_deviceId_tunip.find(deviceId);
+	if (f == umap_deviceId_tunip.end()) {
+		log(log_level::DEBUG, FUN_NAME, "cannot find a assigned tun ip for deviceId[" + deviceId + "]");
+		//// #ip_prefix.#ipindex2.#ipindex1
+		//// example: 10.77.0.1 10.77.0.2 10.77.0.3 ...
+		string newip = "";
+		if (!exceedScope) {
+			newip = ip_prefix + "." + to_string(ip_index2) + "." + to_string(ip_index1);
+			log(log_level::DEBUG, FUN_NAME, "assigned tun_ip is:[" + newip + "] current ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
+			ip_index1++; //所有已分配的ip再加1为第一个可分配IP
+			if (ip_index1 > IP_INDEX1_MAX) {
+				ip_index2++;
+				ip_index1 = 1;
+			}
+			if (ip_index2 == IP_INDEX2_MAX && ip_index1 == IP_INDEX1_MAX) {
+				log(log_level::FATAL, FUN_NAME, "exceed ip_index1 & ip_index2. current ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
+				exceedScope = true;
+			}
+
+			umap_deviceId_tunip[deviceId] = newip;
+			umap_tunip_deviceId[newip] = deviceId;
+			//// update assign_ip_recorder
+			ofstream outfile(assign_ip_recorder.c_str(), ios::app);
+			streampos sp = outfile.tellp();
+			if (sp <= 0)
+				outfile << "##ip_prefix.#ip_index2.#ip_index1=#deviceId" << endl;
+			outfile << newip << "=" << deviceId << endl;
+			outfile.close();
+		} else {
+			log(log_level::ERROR, FUN_NAME, "cannot assign tun_ip. current ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
+		}
+		tun_ip = newip;
+	} else {
+		log(log_level::DEBUG, FUN_NAME, "find a assigned tun ip.");
+		tun_ip = f->second;
+	}
+	mtx_tunaddr_pool.unlock();
+	return tun_ip;
+}
+
+//// 
+//// 依据deviceId查询对应分配的tunip
+//// 
+string TunIPAddrPool::queryTunIPAddrByDeviceId(string deviceId) {
+	string tun_ip;
+	auto f = umap_deviceId_tunip.find(deviceId);
+	if (f == umap_deviceId_tunip.end()) {
+		;
+	} else {
+		tun_ip = f->second;
+	}
+	return tun_ip;
+}
+
 
 //// 
 //// class PeerClientTable
@@ -311,8 +331,7 @@ PeerClientTable::PeerClientTable() {
 
 }
 
-
-////析构函数 
+//// 析构函数 
 PeerClientTable::~PeerClientTable() {
 	mtx_peerClientTable.lock();
 	const string FUN_NAME = "~PeerClientTable";
@@ -324,6 +343,8 @@ PeerClientTable::~PeerClientTable() {
 		}
 		delete single_Instance;
 	}
+	umap_tunip_client.clear();
+	umap_internetip_client.clear();
 	mtx_peerClientTable.unlock();
 }
 
@@ -365,6 +386,7 @@ int PeerClientTable::addPeerClient(string deviceId, string tun_ip, string intern
 		ptr_oldClient->setPeer_deviceId(deviceId);
 		ptr_oldClient->setPeer_internet_ip(internet_ip);
 		ptr_oldClient->setPeer_internet_port(internet_port);
+		ptr_oldClient->resetDataCount();
 	}
 	mtx_peerClientTable.unlock();
 	return result;
@@ -413,6 +435,7 @@ bool PeerClientTable::checkPeerInternetIPandPort(string internet_ip, int port) {
 			if (p_peerClient->getPeer_internet_port() == port) {
 				succeed = true;
 				p_peerClient->refreshRecentConnectTime();
+				p_peerClient->increaseDataPktCount_send();
 			}
 		}
 	}
@@ -421,7 +444,13 @@ bool PeerClientTable::checkPeerInternetIPandPort(string internet_ip, int port) {
 
 //// 
 //// class PeerClient
-//// 
+////
+PeerClient::PeerClient() {
+
+}
+PeerClient::PeerClient(string deviceId, string tun_addr, string internet_addr, int internet_port) : peer_deviceId(deviceId), peer_tun_ip(tun_addr), peer_internet_ip(internet_addr), peer_internet_port(internet_port) {
+
+}
 string PeerClient::getPeer_deviceId() {
 
 	return peer_deviceId;
@@ -447,23 +476,30 @@ int PeerClient::getPeer_internet_port() {
 
 //// 
 void PeerClient::setPeer_deviceId(string deviceId) {
+	mtx_peerClient.lock();
 	peer_deviceId = deviceId;
+	mtx_peerClient.unlock();
 }
 
 //// 
 void PeerClient::setPeer_internet_ip(string internet_ip) {
+	mtx_peerClient.lock();
 	peer_internet_ip = internet_ip;
+	mtx_peerClient.unlock();
 }
 
 //// 
 void PeerClient::setPeer_internet_port(int internet_port) {
+	mtx_peerClient.lock();
 	peer_internet_port = internet_port;
+	mtx_peerClient.unlock();
 }
 
 //// 
 void PeerClient::refreshRecentConnectTime() {
-
+	mtx_peerClient.lock();
 	recentConnectTime = std::chrono::system_clock::now();
+	mtx_peerClient.unlock();
 }
 
 //// 
@@ -473,24 +509,50 @@ std::chrono::system_clock::time_point PeerClient::getRecentConnectTime() {
 }
 
 //// 
-void PeerClient::increasePktCount_recv() {
-
-	pktCount_recv++;
+void PeerClient::increaseDataPktCount_recv() {
+	mtx_peerClient.lock();
+	dataPktCount_recv++;
+	mtx_peerClient.unlock();
 }
 
 //// 
-void PeerClient::increasePktCount_send() {
-
-	pktCount_send++;
+void PeerClient::increaseDataPktCount_send() {
+	mtx_peerClient.lock();
+	dataPktCount_send++;
+	mtx_peerClient.unlock();
 }
 
 //// 
-int PeerClient::getPktCount_send() const {
+int PeerClient::getDataPktCount_send() const {
 
-	return pktCount_send;
+	return dataPktCount_send;
 }
 
 //// 
-int PeerClient::getPktCount_recv() const {
-	return pktCount_recv;
+int PeerClient::getDataPktCount_recv() const {
+	return dataPktCount_recv;
+}
+void PeerClient::increaseCmdPktCount_send() {
+	mtx_peerClient.lock();
+	cmdPktCount_send++;
+	mtx_peerClient.unlock();
+}
+void PeerClient::increaseCmdPktCount_recv() {
+	mtx_peerClient.lock();
+	cmdPktCount_recv
+	mtx_peerClient.unlock();
+}
+int PeerClient::getCmdPktCount_send() const {
+	return cmdPktCount_send;
+}
+int PeerClient::getCmdPktCount_recv() const {
+	return cmdPktCount_recv;
+}
+void PeerClient::resetDataCount() {
+	mtx_peerClient.lock();
+	dataPktCount_send = 0;
+	dataPktCount_recv = 0;
+	cmdPktCount_send = 0;
+	cmdPktCount_recv = 0;
+	mtx_peerClient.unlock();
 }

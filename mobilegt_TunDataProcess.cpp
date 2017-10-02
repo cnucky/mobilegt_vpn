@@ -1,6 +1,5 @@
 
 #include "mobilegt_util.h"
-
 /*
  * 处理TUN interface接收到的来自Internet的数据,然后转发回给手机客户端,采用多线程处理机制
  * 
@@ -74,6 +73,7 @@ int tunDataProcess(PacketPool & tunReceiver_packetPool, int socketfd_tunnel) {
 			//依据tun ip找到需要发送的目的客户端internet ip和port
 			log(log_level::DEBUG, FUN_NAME, "find node peer. peer tun ip is:" + pkt_node->pkt_tunAddr);
 			PeerClient * peerClient = ptr_peerClientTable->getPeerClientByTunIP(pkt_node->pkt_tunAddr);
+			peerClient->increaseDataPktCount_recv();
 			log(log_level::DEBUG, FUN_NAME, "finded internet ip & port:" + peerClient->getPeer_internet_ip() + ":" + to_string(peerClient->getPeer_internet_port()));
 			sockaddr_in peer_cli_addr;
 			memset(&peer_cli_addr, 0, sizeof (peer_cli_addr));
@@ -82,7 +82,7 @@ int tunDataProcess(PacketPool & tunReceiver_packetPool, int socketfd_tunnel) {
 			inet_pton(AF_INET, peerClient->getPeer_internet_ip().c_str(), &peer_cli_addr.sin_addr);
 			log(log_level::DEBUG, FUN_NAME, "send encryptedPacket to socketfd_tunnel. packet size:" + to_string(iCipherTextSize + 1));
 			int size = sendto(socketfd_tunnel, encryptedPacket, iCipherTextSize + 1, MSG_NOSIGNAL, (sockaddr *) & peer_cli_addr, sizeof (peer_cli_addr));
-			
+
 		}
 		tunReceiver_packetPool.consumeCompleted(pkt_node);
 	}

@@ -35,7 +35,7 @@ int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interfa
 			gettimeofday(&eTime, NULL);
 			exeTime = (eTime.tv_sec - sTime.tv_sec)*1000000 + (eTime.tv_usec - sTime.tv_usec); //exeTime 单位是微秒
 			if (exeTime > 1000)
-				log(log_level::INFO, FUN_NAME, "decrypt init exeTime:" + to_string(exeTime));
+				log(log_level::WARN, FUN_NAME, "decrypt init exeTime:" + to_string(exeTime));
 
 			//// decrypt packet;
 			std::string strDecryptedText = "";

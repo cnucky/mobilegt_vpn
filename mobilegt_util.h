@@ -41,6 +41,7 @@ using namespace std;
 #include "cryptopp/aes.h"
 #include "cryptopp/modes.h"
 #include "cryptopp/filters.h"
+
 extern string logfileNameBase;
 extern int loground[10];
 extern int cLoground;
@@ -121,11 +122,9 @@ private:
 class TunIPAddrPool {
 public:
 	//// 为deviceId分配一个tun地址
-	//// 
 	string assignTunIPAddr(string deviceId);
 
 	//// 查询分配给deviceId的tun地址
-	//// 
 	string queryTunIPAddrByDeviceId(string deviceId);
 
 	//// 初始化tun地址池
@@ -138,14 +137,13 @@ public:
 	////     TunIPAddrPool("172.16.0.0","255.255.0.0") 可支持(2^16-2)6万多个客户端同时使用
 	////     TunIPAddrPool("10.77.0.0","255.255.0.0") 可支持(2^16-2)6万多个客户端同时使用
 	////     TunIPAddrPool("10.0.0.0","255.0.0.0") 可支持(2^24-2)1千万多个客户端同时使用
-	TunIPAddrPool(string netaddr, string netmask);
+	TunIPAddrPool(string netaddr, string netmask); //该方法未实现,系统固定使用了10.77.0.0/255.255.0.0初始化
 
-	TunIPAddrPool(string assign_ip_recorder);
+	TunIPAddrPool(string assign_ip_recorder); //对象初始化时读取历史分配记录,系统固定使用了10.77.0.0/255.255.0.0初始化
 
-	//// 缓冲tun地址分配历史记录
+	//// 保存tun地址分配历史记录
 	//// #分配时间\t设备ID号\t分配的IP
-	//// 
-	void cacheHistoryLog(string logFileName_pattern); //deviceId->tun_private_addr
+	void hibernateHistoryLog(string logFileName_pattern); //该方法无需实现,每次分配tunip后都会将分配记录写入文件。deviceId->tun_private_addr存在固定的一一对应关系
 private:
 	string pool_netaddr = "10.77.0.0";
 	string pool_netmask = "255.255.0.0";
@@ -163,12 +161,12 @@ private:
 };
 
 /*
- * 客户端节点数据
- * 客户端结点的实际互联网地址和端口
- * 分配给客户端结点的TUN地址
- * 手机设备deviceId
- * 最近一次的连接时间(或者是有接收报文的时间?)
- * 已接收到的报文计数和已发送给该客户端结点的报文计数
+ * 客户端节点类,每个类对象对应一个手机客户端记录:
+ * 1. 手机设备deviceId
+ * 2. 客户端结点的实际互联网地址和端口
+ * 3. 分配给客户端结点的TUN地址
+ * 4. 最近一次的连接时间(或者是有接收报文的时间?)
+ * 5. 已接收到的报文计数和已发送给该客户端结点的报文计数
  */
 class PeerClient {
 private:
@@ -179,8 +177,11 @@ private:
 	int peer_internet_port;
 	//system_clock::time_point firstConnectTime;
 	std::chrono::system_clock::time_point recentConnectTime;
-	int pktCount_recv = 0;
-	int pktCount_send = 0;
+	int cmdPktCount_recv = 0;
+	int cmdPktCount_send = 0;
+	int dataPktCount_recv = 0;
+	int dataPktCount_send = 0;
+	mutex mtx_peerClient;
 public:
 	string getPeer_deviceId();
 	string getPeer_tun_ip();
@@ -190,26 +191,28 @@ public:
 	void setPeer_internet_ip(string internet_ip);
 	void setPeer_internet_port(int internet_port);
 
-	PeerClient(string deviceId, string tun_addr, string internet_addr, int internet_port) : peer_deviceId(deviceId), peer_tun_ip(tun_addr), peer_internet_ip(internet_addr), peer_internet_port(internet_port) {
-
-	}
-
-	PeerClient() {
-	}
+	PeerClient(string deviceId, string tun_addr, string internet_addr, int internet_port);
+	PeerClient();
 	//void setFirstConnectTime();
 	void refreshRecentConnectTime();
 	std::chrono::system_clock::time_point getRecentConnectTime();
-	void increasePktCount_recv();
-	void increasePktCount_send();
-	int getPktCount_send() const;
-	int getPktCount_recv() const;
+	void increaseDataPktCount_recv();
+	void increaseDataPktCount_send();
+	int getDataPktCount_send() const;
+	int getDataPktCount_recv() const;
+	void increaseCmdPktCount_recv();
+	void increaseCmdPktCount_send();
+	int getCmdPktCount_send() const;
+	int getCmdPktCount_recv() const;
+	void resetDataCount();
 };
 
 /*
  * 
- * 已连接客户端记录表
- * 该类用于维护当前已连接的客户端记录表
- * 使用字段结构,key为tun接口地址,value为PeerClient对象指针
+ * 客户端记录表，单实例类
+ * 该类对象用于维护系统当前所有连接的客户端记录
+ * 使用字典结构,key为分配给该手机客户端的tun接口地址,value为PeerClient对象指针
+ * 设置了mtx_peerClientTable作为多线程并发操作锁，避免同时操作
  * #include <unordered_map>
  * 
  */
