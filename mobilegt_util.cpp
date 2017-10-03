@@ -124,82 +124,6 @@ void checkLogger(string currentLogFile) {
 }
 
 //// 
-//// class PacketPool
-//// 构造函数
-//// 报文缓冲池, 构造初始化构建分配POOL_NODE_MAX_NUMBER个缓冲节点用于存放数据
-PacketPool::PacketPool() {
-	const string FUN_NAME = "PacketPool";
-	log(log_level::DEBUG, FUN_NAME, "packet pool constructor.");
-	for (int i = 0; i < POOL_NODE_MAX_NUMBER; i++) {
-		ptr_pktNodePool[i] = new PacketNode(i);
-		queue_producer.push(i); // 即:queue_producer.push(ptr_pktNodePool[i]->index);
-	}
-
-}
-
-//// 
-//// class PacketPool
-//// 析构函数,回收构造是分配的POOL_NODE_MAX_NUMBER个缓冲报文节点
-//// 
-PacketPool::~PacketPool() {
-	for (int i = 0; i < POOL_NODE_MAX_NUMBER; i++) {
-		delete ptr_pktNodePool[i];
-	}
-}
-
-//// 得到一个用于接收网络数据报文的节点
-PacketNode* PacketPool::produce() {
-	int nodeIndex = -1;
-	mtx_queue_producer.lock();
-	if (!queue_producer.empty()) {
-		nodeIndex = queue_producer.front();
-		queue_producer.pop();
-	}
-	mtx_queue_producer.unlock();
-	if (nodeIndex >= 0)
-		return ptr_pktNodePool[nodeIndex];
-	else
-		return NULL;
-}
-
-//// 结点已接收完网络数据报文,加入待处理队列
-void PacketPool::produceCompleted(PacketNode * const pkt_node) {
-	mtx_queue_consumer.lock();
-	queue_consumer.push(pkt_node->index);
-	mtx_queue_consumer.unlock();
-	produce_cv.notify_all();
-}
-//// 结点接收的数据为空或用于接收数据的结点不需要接收数据,回收结点用于下次接收
-void PacketPool::produceWithdraw(PacketNode * const pkt_node) {
-	PacketPool::consumeCompleted(pkt_node);
-}
-
-//// 得到一个需要处理(即,已接收网络数据报文)的节点
-PacketNode* PacketPool::consume() {
-	int nodeIndex = -1;
-	mtx_queue_consumer.lock();
-	if (!queue_consumer.empty()) {
-		nodeIndex = queue_consumer.front();
-		queue_consumer.pop();
-	}
-	mtx_queue_consumer.unlock();
-	if (nodeIndex >= 0)
-		return ptr_pktNodePool[nodeIndex];
-	else
-		return NULL;
-}
-
-//// 节点数据处理完毕,加入待处理队列
-void PacketPool::consumeCompleted(PacketNode * const pkt_node) {
-	pkt_node->pkt_len = 0;
-	mtx_queue_producer.lock();
-	queue_producer.push(pkt_node->index);
-	mtx_queue_producer.unlock();
-	consume_cv.notify_all(); // 条件变量,唤醒所有线程.
-}
-
-
-//// 
 TunIPAddrPool::TunIPAddrPool(string netaddr, string netmask) : pool_netaddr(netaddr), pool_netmask(netmask) {
 	//// 未实现
 }
@@ -250,7 +174,7 @@ TunIPAddrPool::TunIPAddrPool(string assign_ip_recorder) : assign_ip_recorder(ass
 		log(log_level::FATAL, FUN_NAME, "exceed ip_index1 & ip_index2. current ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
 	}
 	infile.close();
-	log(log_level::DEBUG, FUN_NAME, "initial ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
+	log(log_level::INFO, FUN_NAME, "initial ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
 	mtx_tunaddr_pool.unlock();
 }
 
@@ -269,13 +193,15 @@ string TunIPAddrPool::assignTunIPAddr(string deviceId) {
 	string tun_ip;
 	auto f = umap_deviceId_tunip.find(deviceId);
 	if (f == umap_deviceId_tunip.end()) {
-		log(log_level::DEBUG, FUN_NAME, "cannot find a assigned tun ip for deviceId[" + deviceId + "]");
+		if (OPEN_DEBUGLOG)
+			log(log_level::DEBUG, FUN_NAME, "cannot find a assigned tun ip for deviceId[" + deviceId + "]");
 		//// #ip_prefix.#ipindex2.#ipindex1
 		//// example: 10.77.0.1 10.77.0.2 10.77.0.3 ...
 		string newip = "";
 		if (!exceedScope) {
 			newip = ip_prefix + "." + to_string(ip_index2) + "." + to_string(ip_index1);
-			log(log_level::DEBUG, FUN_NAME, "assigned tun_ip is:[" + newip + "] current ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
+			if (OPEN_DEBUGLOG)
+				log(log_level::DEBUG, FUN_NAME, "assigned tun_ip is:[" + newip + "] current ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
 			ip_index1++; //所有已分配的ip再加1为第一个可分配IP
 			if (ip_index1 > IP_INDEX1_MAX) {
 				ip_index2++;
@@ -300,7 +226,8 @@ string TunIPAddrPool::assignTunIPAddr(string deviceId) {
 		}
 		tun_ip = newip;
 	} else {
-		log(log_level::DEBUG, FUN_NAME, "find a assigned tun ip.");
+		if (OPEN_DEBUGLOG)
+			log(log_level::DEBUG, FUN_NAME, "find a assigned tun ip.");
 		tun_ip = f->second;
 	}
 	mtx_tunaddr_pool.unlock();
@@ -319,127 +246,6 @@ string TunIPAddrPool::queryTunIPAddrByDeviceId(string deviceId) {
 		tun_ip = f->second;
 	}
 	return tun_ip;
-}
-
-
-//// 
-//// class PeerClientTable
-//// 
-PeerClientTable * PeerClientTable::single_Instance = NULL;
-PeerClientTable::PeerClientTable() {
-	//构造函数是私有的  
-
-}
-
-//// 析构函数 
-PeerClientTable::~PeerClientTable() {
-	mtx_peerClientTable.lock();
-	const string FUN_NAME = "~PeerClientTable";
-	log(log_level::DEBUG, FUN_NAME, "destructor clear all peer client object.");
-	if (single_Instance == NULL) {
-		for (auto iter = umap_tunip_client.begin(); iter != umap_tunip_client.end(); iter++) {
-			PeerClient * p_peerClient = iter->second;
-			delete p_peerClient;
-		}
-		delete single_Instance;
-	}
-	umap_tunip_client.clear();
-	umap_internetip_client.clear();
-	mtx_peerClientTable.unlock();
-}
-
-//// 
-PeerClientTable * PeerClientTable::getInstance() {
-	if (single_Instance == NULL) //判断是否第一次调用  
-		single_Instance = new PeerClientTable();
-	return single_Instance;
-}
-
-//// 
-PeerClient * PeerClientTable::getPeerClientByTunIP(string tun_ip) {
-	if (umap_tunip_client.find(tun_ip) == umap_tunip_client.end()) {
-		return NULL;
-	} else {
-		return umap_tunip_client[tun_ip];
-	}
-}
-
-//int PeerClientTable::addPeerClient(string tun_ip, PeerClient * p_peerClient) {
-//	int result = 0;
-//	umap_tunip_client[tun_ip] = p_peerClient;
-//	umap_internetip_client[p_peerClient->getPeer_internet_ip()] = p_peerClient;
-//	result = 1;
-//	return result;
-//}
-int PeerClientTable::addPeerClient(string deviceId, string tun_ip, string internet_ip, int internet_port) {
-	mtx_peerClientTable.lock();
-	PeerClient* ptr_oldClient = getPeerClientByTunIP(tun_ip);
-	int result = 0;
-	if (ptr_oldClient == NULL) {
-		PeerClient * p_peerClient = new PeerClient(deviceId, tun_ip, internet_ip, internet_port);
-		p_peerClient->refreshRecentConnectTime();
-		umap_tunip_client[tun_ip] = p_peerClient;
-		umap_internetip_client[internet_ip] = p_peerClient;
-		result = 1;
-	} else {
-		ptr_oldClient->refreshRecentConnectTime();
-		ptr_oldClient->setPeer_deviceId(deviceId);
-		ptr_oldClient->setPeer_internet_ip(internet_ip);
-		ptr_oldClient->setPeer_internet_port(internet_port);
-		ptr_oldClient->resetDataCount();
-	}
-	mtx_peerClientTable.unlock();
-	return result;
-}
-
-//// 
-int PeerClientTable::deletePeerClient(string tun_ip) {
-	mtx_peerClientTable.lock();
-	const string FUN_NAME = "deletePeerClient";
-	int result = 0;
-	auto iter1 = umap_tunip_client.find(tun_ip);
-	log(log_level::DEBUG, FUN_NAME, "find tun_ip:" + tun_ip);
-	if (iter1 != umap_tunip_client.end()) {
-		PeerClient * p_peerClient = umap_tunip_client[tun_ip];
-		string internet_ip = p_peerClient->getPeer_internet_ip();
-		auto iter2 = umap_internetip_client.find(internet_ip);
-		if (iter2 != umap_internetip_client.end()) {
-			umap_internetip_client.erase(iter2);
-		}
-		umap_tunip_client.erase(iter1);
-		log(log_level::DEBUG, FUN_NAME, "begin delete p_peerClient");
-		delete p_peerClient;
-		result = 1;
-	}
-	mtx_peerClientTable.unlock();
-	return result;
-}
-
-////
-bool PeerClientTable::checkPeerInternetIPandPort(string internet_ip, int port) {
-	const string FUN_NAME = "checkPeerInternetIPandPort";
-	bool succeed = false;
-	log(log_level::DEBUG, FUN_NAME, "begin check." + internet_ip + ":" + to_string(port));
-	if (umap_internetip_client.find(internet_ip) != umap_internetip_client.end()) {
-		log(log_level::DEBUG, FUN_NAME, "finded " + internet_ip + ".begin check time and port");
-		PeerClient * p_peerClient = umap_internetip_client[internet_ip];
-
-		std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
-		std::chrono::system_clock::time_point recent = p_peerClient->getRecentConnectTime();
-		//// 30minute * 60second/minute
-		//// 最近连接时间不超过30分钟
-		int tt = std::chrono::duration_cast<std::chrono::seconds>(now - recent).count();
-		int finded_port = p_peerClient->getPeer_internet_port();
-		log(log_level::DEBUG, FUN_NAME, "finded port is:" + to_string(finded_port) + ".time duration seconds is:" + to_string(tt));
-		if (tt <= 30 * 60) {
-			if (p_peerClient->getPeer_internet_port() == port) {
-				succeed = true;
-				p_peerClient->refreshRecentConnectTime();
-				p_peerClient->increaseDataPktCount_send();
-			}
-		}
-	}
-	return succeed;
 }
 
 //// 
@@ -539,7 +345,7 @@ void PeerClient::increaseCmdPktCount_send() {
 }
 void PeerClient::increaseCmdPktCount_recv() {
 	mtx_peerClient.lock();
-	cmdPktCount_recv
+	cmdPktCount_recv++;
 	mtx_peerClient.unlock();
 }
 int PeerClient::getCmdPktCount_send() const {
@@ -556,3 +362,218 @@ void PeerClient::resetDataCount() {
 	cmdPktCount_recv = 0;
 	mtx_peerClient.unlock();
 }
+
+//// 
+//// class PeerClientTable
+//// 
+PeerClientTable * PeerClientTable::single_Instance = NULL;
+PeerClientTable::PeerClientTable() {
+	//构造函数是私有的  
+
+}
+
+//// 析构函数 
+PeerClientTable::~PeerClientTable() {
+	mtx_peerClientTable.lock();
+	const string FUN_NAME = "~PeerClientTable";
+	if (OPEN_DEBUGLOG)
+		log(log_level::DEBUG, FUN_NAME, "destructor clear all peer client object.");
+	if (single_Instance == NULL) {
+		for (auto iter = umap_tunip_client.begin(); iter != umap_tunip_client.end(); iter++) {
+			PeerClient * p_peerClient = iter->second;
+			delete p_peerClient;
+		}
+		delete single_Instance;
+	}
+	umap_tunip_client.clear();
+	umap_internetip_client.clear();
+	mtx_peerClientTable.unlock();
+}
+
+//// 
+PeerClientTable * PeerClientTable::getInstance() {
+	if (single_Instance == NULL) //判断是否第一次调用  
+		single_Instance = new PeerClientTable();
+	return single_Instance;
+}
+
+//// 
+PeerClient * PeerClientTable::getPeerClientByTunIP(string tun_ip) {
+	if (umap_tunip_client.find(tun_ip) == umap_tunip_client.end()) {
+		return NULL;
+	} else {
+		return umap_tunip_client[tun_ip];
+	}
+}
+
+//int PeerClientTable::addPeerClient(string tun_ip, PeerClient * p_peerClient) {
+//	int result = 0;
+//	umap_tunip_client[tun_ip] = p_peerClient;
+//	umap_internetip_client[p_peerClient->getPeer_internet_ip()] = p_peerClient;
+//	result = 1;
+//	return result;
+//}
+int PeerClientTable::addPeerClient(string deviceId, string tun_ip, string internet_ip, int internet_port) {
+	mtx_peerClientTable.lock();
+	PeerClient* ptr_oldClient = getPeerClientByTunIP(tun_ip);
+	int result = 0;
+	if (ptr_oldClient == NULL) {
+		PeerClient * p_peerClient = new PeerClient(deviceId, tun_ip, internet_ip, internet_port);
+		p_peerClient->refreshRecentConnectTime();
+		umap_tunip_client[tun_ip] = p_peerClient;
+		umap_internetip_client[internet_ip] = p_peerClient;
+		result = 1;
+	} else {
+		ptr_oldClient->refreshRecentConnectTime();
+		ptr_oldClient->setPeer_deviceId(deviceId);
+		ptr_oldClient->setPeer_internet_ip(internet_ip);
+		ptr_oldClient->setPeer_internet_port(internet_port);
+		ptr_oldClient->resetDataCount();
+	}
+	mtx_peerClientTable.unlock();
+	return result;
+}
+
+//// 
+int PeerClientTable::deletePeerClient(string tun_ip) {
+	mtx_peerClientTable.lock();
+	const string FUN_NAME = "deletePeerClient";
+	int result = 0;
+	auto iter1 = umap_tunip_client.find(tun_ip);
+	if (OPEN_DEBUGLOG)
+		log(log_level::DEBUG, FUN_NAME, "find tun_ip:" + tun_ip);
+	if (iter1 != umap_tunip_client.end()) {
+		PeerClient * p_peerClient = umap_tunip_client[tun_ip];
+		string internet_ip = p_peerClient->getPeer_internet_ip();
+		auto iter2 = umap_internetip_client.find(internet_ip);
+		if (iter2 != umap_internetip_client.end()) {
+			umap_internetip_client.erase(iter2);
+		}
+		umap_tunip_client.erase(iter1);
+		if (OPEN_DEBUGLOG)
+			log(log_level::DEBUG, FUN_NAME, "begin delete p_peerClient");
+		delete p_peerClient;
+		result = 1;
+	}
+	mtx_peerClientTable.unlock();
+	return result;
+}
+
+////
+bool PeerClientTable::checkPeerInternetIPandPort(string internet_ip, int port) {
+	const string FUN_NAME = "checkPeerInternetIPandPort";
+	bool succeed = false;
+	if (OPEN_DEBUGLOG)
+		log(log_level::DEBUG, FUN_NAME, "begin check." + internet_ip + ":" + to_string(port));
+	if (umap_internetip_client.find(internet_ip) != umap_internetip_client.end()) {
+		if (OPEN_DEBUGLOG)
+			log(log_level::DEBUG, FUN_NAME, "finded " + internet_ip + ".begin check time and port");
+		PeerClient * p_peerClient = umap_internetip_client[internet_ip];
+
+		std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
+		std::chrono::system_clock::time_point recent = p_peerClient->getRecentConnectTime();
+		//// 30minute * 60second/minute
+		//// 最近连接时间不超过30分钟
+		int tt = std::chrono::duration_cast<std::chrono::seconds>(now - recent).count();
+		int finded_port = p_peerClient->getPeer_internet_port();
+		if (OPEN_DEBUGLOG)
+			log(log_level::DEBUG, FUN_NAME, "finded port is:" + to_string(finded_port) + ".time duration seconds is:" + to_string(tt));
+		if (tt <= 30 * 60) {
+			if (p_peerClient->getPeer_internet_port() == port) {
+				succeed = true;
+				p_peerClient->refreshRecentConnectTime();
+				p_peerClient->increaseDataPktCount_send();
+			}
+		}
+	}
+	return succeed;
+}
+unordered_map<string, PeerClient*> PeerClientTable::getUmap_tunip_client() const {
+	return umap_tunip_client;
+}
+
+//// 
+//// class PacketNode
+//// 
+PacketNode::PacketNode(int nodeIndex) : index(nodeIndex) {
+	ptr = new char[MAX_LEN];
+	pkt_len = 0;
+	timestamp = 0;
+}
+PacketNode::~PacketNode() {
+	delete[] ptr;
+}
+
+//// 
+//// class PacketPool
+//// 构造函数
+//// 报文缓冲池, 构造初始化构建分配POOL_NODE_MAX_NUMBER个缓冲节点用于存放数据
+PacketPool::PacketPool() {
+	const string FUN_NAME = "PacketPool";
+	if (OPEN_DEBUGLOG)
+		log(log_level::DEBUG, FUN_NAME, "packet pool constructor.");
+	for (int i = 0; i < POOL_NODE_MAX_NUMBER; i++) {
+		ptr_pktNodePool[i] = new PacketNode(i);
+		queue_producer.push(i); // 即:queue_producer.push(ptr_pktNodePool[i]->index);
+	}
+}
+
+//// 
+//// 析构函数,回收构造是分配的POOL_NODE_MAX_NUMBER个缓冲报文节点
+PacketPool::~PacketPool() {
+	for (int i = 0; i < POOL_NODE_MAX_NUMBER; i++) {
+		delete ptr_pktNodePool[i];
+	}
+}
+
+//// 得到一个用于接收网络数据报文的节点
+PacketNode* PacketPool::produce() {
+	int nodeIndex = -1;
+	mtx_queue_producer.lock();
+	if (!queue_producer.empty()) {
+		nodeIndex = queue_producer.front();
+		queue_producer.pop();
+	}
+	mtx_queue_producer.unlock();
+	if (nodeIndex >= 0)
+		return ptr_pktNodePool[nodeIndex];
+	else
+		return NULL;
+}
+
+//// 结点已接收完网络数据报文,加入待处理队列
+void PacketPool::produceCompleted(PacketNode * const pkt_node) {
+	mtx_queue_consumer.lock();
+	queue_consumer.push(pkt_node->index);
+	mtx_queue_consumer.unlock();
+	produce_cv.notify_all();
+}
+//// 结点接收的数据为空或用于接收数据的结点不需要接收数据,回收结点用于下次接收
+void PacketPool::produceWithdraw(PacketNode * const pkt_node) {
+	PacketPool::consumeCompleted(pkt_node);
+}
+
+//// 得到一个需要处理(即,已接收网络数据报文)的节点
+PacketNode* PacketPool::consume() {
+	int nodeIndex = -1;
+	mtx_queue_consumer.lock();
+	if (!queue_consumer.empty()) {
+		nodeIndex = queue_consumer.front();
+		queue_consumer.pop();
+	}
+	mtx_queue_consumer.unlock();
+	if (nodeIndex >= 0)
+		return ptr_pktNodePool[nodeIndex];
+	else
+		return NULL;
+}
+
+//// 节点数据处理完毕,加入待处理队列
+void PacketPool::consumeCompleted(PacketNode * const pkt_node) {
+	pkt_node->pkt_len = 0;
+	mtx_queue_producer.lock();
+	queue_producer.push(pkt_node->index);
+	mtx_queue_producer.unlock();
+	consume_cv.notify_all(); // 条件变量,唤醒所有线程.
+}
+

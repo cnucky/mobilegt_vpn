@@ -1,15 +1,16 @@
 
 #include "mobilegt_util.h"
 
-/*
-处理接收来自手机客户端的数据,然后转发给TUN interface,采用多线程机制并发处理
-1. 解密接收到数据客户端数据(加密数据)
-2. 转发
 
- */
 int build_parameters(char *parameters, int size, const string tun_ip, const map<string, string> & conf_m);
+/*
+ * 处理接收来自手机客户端的数据,然后转发给TUN interface,采用多线程机制并发处理
+ * 1. 解密接收到数据客户端数据(加密数据)
+ * 2. 转发
+ */
 int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interface, int socketfd_tunnel, TunIPAddrPool & tunip_pool, const map<string, string> & conf_m) {
 	const string FUN_NAME = "tunnelDataProcess";
+	const int WARN_THRESHOLD = 10000; //微秒
 	EncryptDecryptHelper * aes_helper = EncryptDecryptHelper::getInstance();
 	struct timeval sTime, eTime;
 	long exeTime;
@@ -18,6 +19,8 @@ int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interfa
 	while (true) {
 		PacketNode* pkt_node = tunnelReceiver_packetPool.consume();
 		if (pkt_node == NULL) {
+			if (SYSTEM_EXIT)
+				break;
 			//阻塞等待通知有数据
 			//std::unique_lock <std::mutex> lck(mtx);
 			//tunnelReceiver_packetPool.produce_cv.wait(lck);
@@ -29,19 +32,20 @@ int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interfa
 		char* packet = pkt_node->ptr;
 		int packet_len = pkt_node->pkt_len;
 		if (packet[0] != 0) {
-			log(log_level::DEBUG, FUN_NAME, "process data packet.pkt_length:" + to_string(packet_len));
+			if (OPEN_DEBUGLOG)
+				log(log_level::DEBUG, FUN_NAME, "process data cipher packet. pkt_length:" + to_string(packet_len));
 			gettimeofday(&sTime, NULL);
 			CryptoPP::CBC_Mode_ExternalCipher::Decryption cbcDecryption(aes_helper->aesDecryption, aes_helper->iv);
 			gettimeofday(&eTime, NULL);
 			exeTime = (eTime.tv_sec - sTime.tv_sec)*1000000 + (eTime.tv_usec - sTime.tv_usec); //exeTime 单位是微秒
-			if (exeTime > 1000)
+			if (exeTime > WARN_THRESHOLD)
 				log(log_level::WARN, FUN_NAME, "decrypt init exeTime:" + to_string(exeTime));
 
 			//// decrypt packet;
 			std::string strDecryptedText = "";
-			//stfDecryptor.Put((byte*)(strCiphertext.c_str() ),strCiphertext.length());
-			//logger << "\nrecv cipher packet from tunnel length:" << dec << length << " packet:" << endl;
+
 			/*
+			16进制输出接收到的加密数据报文
 			for(int i=0;i<length;i++)
 				cout <<hex<< (0xFF & static_cast<byte>(packet[i])) << " ";
 			cout << endl;
@@ -59,8 +63,8 @@ int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interfa
 			}
 
 			int datalength = bytesToInt(lb);
-
-			log(log_level::DEBUG, FUN_NAME, "plain packet length-data length:" + to_string(iDecryptedTextSize) + "-" + to_string(datalength) + " length packet:");
+			if (OPEN_DEBUGLOG)
+				log(log_level::DEBUG, FUN_NAME, "decrypted plain packet length-data length:" + to_string(iDecryptedTextSize) + "-" + to_string(datalength) + " length packet:");
 			/*
 			for(int i=0;i<4;i++) {
 			//lb[i]=static_cast<byte>(strDecryptedText[i]);
@@ -72,24 +76,27 @@ int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interfa
 				decryptedPacket[i] = static_cast<byte> (strDecryptedText[i + 4]);
 				//	std::cout << hex << (0xFF & static_cast<byte>(strDecryptedText[i+4])) << " ";
 			}
-			// Write the incoming packet to the fd_tun_interfacd.
 			gettimeofday(&eTime, NULL);
 			exeTime = (eTime.tv_sec - sTime.tv_sec)*1000000 + (eTime.tv_usec - sTime.tv_usec); //exeTime 单位是微秒
-			if (exeTime > 1000)
-				log(log_level::INFO, FUN_NAME, "decrypt exeTime:" + to_string(exeTime));
-			log(log_level::DEBUG, FUN_NAME, "write to fd_tun_interface. decryptedPacket datalength is:" + to_string(datalength));
+			if (exeTime > WARN_THRESHOLD)
+				log(log_level::WARN, FUN_NAME, "decrypt exeTime:" + to_string(exeTime));
+			// Write the incoming packet to the fd_tun_interfacd.
+			if (OPEN_DEBUGLOG)
+				log(log_level::DEBUG, FUN_NAME, "write to fd_tun_interface. decryptedPacket datalength is:" + to_string(datalength));
 			write(fd_tun_interface, decryptedPacket, datalength);
 		} else {
 			//不是数据报文,而是建立建立连接命令报文,检查约定的密钥是否正确,正确则记录该客户端,并向该客户端发送响应报文
 			//手机客户端命令报文数据格式为[0][sharedsecret][:][deviceId]
-			log(log_level::DEBUG, FUN_NAME, "process cmd packet. pkt_length:" + to_string(packet_len));
+			if (OPEN_DEBUGLOG)
+				log(log_level::DEBUG, FUN_NAME, "process cmd packet. pkt_length:" + to_string(packet_len));
 			string str_recv_pkt1, str_recv_deviceId, str_recv_secret;
 			str_recv_pkt1.append(&packet[1], packet_len - 1); //skip packet[0]
 			string secret_delimiter = ":";
-			string secret = "test0";
 			str_recv_secret = str_recv_pkt1.substr(0, str_recv_pkt1.find(secret_delimiter));
 			str_recv_deviceId = str_recv_pkt1.substr(str_recv_pkt1.find(secret_delimiter) + 1);
-			log(log_level::DEBUG, FUN_NAME, "recv_secret is[" + str_recv_secret + "]. recvDeviceId is [" + str_recv_deviceId + "] deviceid length:" + to_string(str_recv_deviceId.length()));
+			//log(log_level::DEBUG, FUN_NAME, "recv_secret is[" + str_recv_secret + "]. recvDeviceId is [" + str_recv_deviceId + "] deviceid length:" + to_string(str_recv_deviceId.length()));
+			if (OPEN_DEBUGLOG)
+				log(log_level::DEBUG, FUN_NAME, "recv_secret is[*****]. recvDeviceId is [" + str_recv_deviceId + "] deviceid length:" + to_string(str_recv_deviceId.length()));
 			if (str_recv_secret == secret) {
 				//验证通过,记录客户端IP,端口信息等
 				string deviceId = str_recv_deviceId;
@@ -114,17 +121,12 @@ int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interfa
 		}
 		tunnelReceiver_packetPool.consumeCompleted(pkt_node);
 	}
+	log(log_level::FATAL, FUN_NAME, "exit!");
 	return 0;
 }
 
 //build_parameters()方法构建参数,将tun接口的配置数据发送给通过验证的客户端
 //example:
-//	char parameters[1024];
-//	build_parameters(parameters, sizeof(parameters), argc, argv);
-//	for (int i = 0; i < 3; ++i) {
-//		//logger << "send parameter." << endl;
-//		send(tunnel, parameters, sizeof(parameters), MSG_NOSIGNAL);
-//	}
 //参数主要有tun的地址,dns的地址,mtu
 //sudo ./ToyVpnServer_encrypt $TUN_NAME $VPN_PORT $SECRET $CaptureCMD -m 1400 -a $PRIVATE_ADDR 32 -d $DNS_ADDR -r 0.0.0.0 0
 //	"  -m <MTU> for the maximum transmission unit\n"

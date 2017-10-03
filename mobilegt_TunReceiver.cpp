@@ -20,11 +20,12 @@
 int tunReceiver(int fd_tun_interface, PacketPool & tunIF_recv_packetPool) {
 	//PacketPool packetPool; //报文缓冲池
 	const string FUN_NAME = "tunReceiver";
-	while (true) {
+	while (!SYSTEM_EXIT) {
 		// Read the packet from the TUN interface.
 		// 来自该接口的流量为互联网响应流量
 		//packet来自缓冲池的空节点
-		log(log_level::DEBUG, FUN_NAME, "produce TUN recv node");
+		if (OPEN_DEBUGLOG)
+			log(log_level::DEBUG, FUN_NAME, "produce TUN recv node");
 		PacketNode* pkt_node = tunIF_recv_packetPool.produce(); //得到一个空闲节点
 		if (pkt_node == NULL) {
 			//没有空闲节点
@@ -36,20 +37,22 @@ int tunReceiver(int fd_tun_interface, PacketPool & tunIF_recv_packetPool) {
 		}
 		char* packet = pkt_node->ptr;
 		int packet_len = pkt_node->MAX_LEN;
-		log(log_level::DEBUG, FUN_NAME, "pkt_node index is:" + to_string(pkt_node->index) + ". read(fd_tun_interface) data to node");
+		if (OPEN_DEBUGLOG)
+			log(log_level::DEBUG, FUN_NAME, "pkt_node index is:" + to_string(pkt_node->index) + ". read(fd_tun_interface) data to node");
 		int length = read(fd_tun_interface, packet, packet_len);
 		pkt_node->pkt_len = length;
-		log(log_level::DEBUG, FUN_NAME, "recv fd_tun_interface length:" + to_string(length));
+		if (OPEN_DEBUGLOG)
+			log(log_level::DEBUG, FUN_NAME, "recv fd_tun_interface length:" + to_string(length));
 		bool dropPacket = true; //是否丢弃报文
 		if (length > 0) {
 			//解析packet包含的目的IP地址packet[16-19](源地址为packet[12-15],参考IPv4报文头格式前20字节)
 			struct in_addr addr_dst;
+			char dstIPdotdec[20];
 			memcpy((void*) &addr_dst.s_addr, &packet[16], sizeof (in_addr));
-			char IPdotdec[20];
-			inet_ntop(AF_INET, (void *) &addr_dst, IPdotdec, 16);
-			string ip_tun = IPdotdec;
-			pkt_node->pkt_tunAddr = ip_tun;
-			log(log_level::DEBUG, FUN_NAME, "recv fd_tun_interface data to " + ip_tun);
+			inet_ntop(AF_INET, (void *) &addr_dst, dstIPdotdec, 16);
+			pkt_node->pkt_tunAddr = dstIPdotdec;
+			if (OPEN_DEBUGLOG)
+				log(log_level::DEBUG, FUN_NAME, "recv fd_tun_interface data to " + pkt_node->pkt_tunAddr);
 			//置条件变量为有数据到达，触发其它线程将缓存池中的数据发送给对应的客户端
 			dropPacket = false;
 		}
@@ -59,6 +62,6 @@ int tunReceiver(int fd_tun_interface, PacketPool & tunIF_recv_packetPool) {
 			tunIF_recv_packetPool.produceCompleted(pkt_node);
 		}
 	}
-
+	log(log_level::FATAL, FUN_NAME, "exit!");
 	return 0;
 }

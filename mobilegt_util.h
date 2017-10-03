@@ -48,6 +48,10 @@ extern int cLoground;
 extern string currentLogFile;
 extern ofstream logger;
 
+extern string secret;
+extern bool SYSTEM_EXIT;
+extern bool OPEN_DEBUGLOG;
+
 enum log_level {
 	DEBUG, INFO, WARN, ERROR, FATAL
 };
@@ -231,6 +235,8 @@ public:
 
 	bool checkPeerInternetIPandPort(string internet_ip, int port);
 	~PeerClientTable();
+
+	unordered_map<string, PeerClient*> getUmap_tunip_client() const;
 private:
 
 	PeerClientTable();
@@ -240,16 +246,15 @@ private:
 	mutex mtx_peerClientTable;
 };
 
-/*
-数据缓冲池的设计
-缓冲池由称为报文节点的多个缓冲节点组成.报文节点缓冲存放接收到的具体网络数据报文.每个报文节点在缓冲池中有唯一的索引编号.
-缓冲池的设计为维护两个队列:一个消费者队列,一个生产者队列.生产者队列存放了可用于缓存接收网络数据的的节点队列.生产结束后将对应的节点放入消费者队列;消费者队列存放了已经接收网络数据的节点队列.消费结束后将消费的节点放入生产者队列.
-produce()方法得到一个空的报文节点用于待接收网络数据.
-produceCompleted(const pktNode *)接收完网络数据后调用该方法标识该报文节点已缓存数据,报文节点放入消费者队列.
-consume()方法得到一个已缓存报文的节点,然后其它程序课处理该报文节点缓存的数据.
-consumeCompleted(const pktNode *)报文节点缓存的数据处理完毕后调用该方法标识缓存的数据已处理,节点放入生产者队列.
+/**
+ * 缓冲池由称为报文节点的多个缓冲节点组成.报文节点缓冲存放接收到的具体网络数据报文.每个报文节点在缓冲池中有唯一的索引编号.
+ * 缓冲池的设计为维护两个队列:一个消费者队列,一个生产者队列.生产者队列存放了可用于缓存接收网络数据的的节点队列.生产结束后将对应的节点放入消费者队列;消费者队列存放了已经接收网络数据的节点队列.消费结束后将消费的节点放入生产者队列.
+ * produce()方法得到一个空的报文节点用于待接收网络数据.
+ * produceCompleted(const pktNode *)接收完网络数据后调用该方法标识该报文节点已缓存数据,报文节点放入消费者队列.
+ * consume()方法得到一个已缓存报文的节点,然后其它程序课处理该报文节点缓存的数据.
+ * consumeCompleted(const pktNode *)报文节点缓存的数据处理完毕后调用该方法标识缓存的数据已处理,节点放入生产者队列.
+ * 数据缓冲池的设计
  */
-
 class PacketNode {
 public:
 	char * ptr; //字符数组,存放具体接收到的网络数据报文
@@ -258,38 +263,18 @@ public:
 	const int index; //记录本节点在缓冲池中的索引编号,一旦初始化则不能再修改
 	long timestamp; //记录节点数据报文接收时间标记
 	string pkt_tunAddr; //对于tun_interface接收的数据需记录目的地址(tun_interface地址),后续处理报文需依据这个地址找到客户端internet地址
-	string pkt_internetAddr; //记录节点数据报文来源IP地址
-	int pkt_internetPort; //记录节点数据报文来源端口
+	string pkt_internetAddr; //记录节点数据报文来源IP地址,只用于记录手机客户端的ip
+	int pkt_internetPort; //记录节点数据报文来源端口,只用于记录手机客户端的端口
 
-	PacketNode(int nodeIndex) : index(nodeIndex) {
-		ptr = new char[MAX_LEN];
-		pkt_len = 0;
-		timestamp = 0;
-	}
+	PacketNode(int nodeIndex);
 
-	~PacketNode() {
-		delete[] ptr;
-	}
+	~PacketNode();
 };
 
-//
-//必须考虑线程安全性<----
-//
-//使用一个字符数组缓冲池存放接收到的网络数据报文
-//|-------|    |-------|    |-------|    |-------|    |-------|    |-------|    |-------|
-//| HEAD  |    |       |    |       |    |       |    |       |    |       |    |  NULL |
-//|-------|--->|-------|--->|-------|--->|-------|--->|-------|--->|-------|--->|-------|
-//                 ^                      
-//                 C                      
-//|-------|    |-------|    |-------|    |-------|    |-------|    |-------|    |-------|
-//| HEAD  |    |       |    |       |    |       |    |       |    |       |    |  NULL |
-//|-------|--->|-------|--->|-------|--->|-------|--->|-------|--->|-------|--->|-------|
-//                 ^                        
-//                 P                        
+//// 
+//// 必须考虑线程安全性<----
+////
 
-/*
-
- */
 class PacketPool {
 public:
 	const static int POOL_NODE_MAX_NUMBER = 2000; //缓冲池最大节点数目
@@ -299,20 +284,17 @@ public:
 	void produceCompleted(PacketNode * const pkt_node); //节点已接收完网络数据报文,加入待处理队列
 	void produceWithdraw(PacketNode * const pkt_node); //接收到的报文无需处理,回收空闲节点
 	PacketNode* consume(); //得到一个需要处理(即,已接收网络数据报文)的节点
-	void consumeCompleted(PacketNode * const pkt_node); //节点数据处理完毕,加入待处理队列
+	void consumeCompleted(PacketNode * const pkt_node); //节点数据处理完毕,加入可接收数据的结点队列
 
 	std::condition_variable consume_cv;
 	std::condition_variable produce_cv;
 
 private:
 	PacketNode* ptr_pktNodePool[POOL_NODE_MAX_NUMBER];
-	//pktNode * ptr_producer;		//记录当前最新分配用于接收网络数据报文节点,接收数据完毕后报文长度>0
-	//pktNode * ptr_consumer;		//记录当前最近处理的网络数据报文节点,处理完置节点报文长度<=0
-	//pktNode * prt_head;			//记录队列链表头节点
-	mutex mtx_queue_producer; //mtx.lock(),mtx.unlock()
+	mutex mtx_queue_producer; //mtx***.lock(),mtx***.unlock()
 	mutex mtx_queue_consumer;
-	queue<int> queue_producer; //可接收数据的节点索引队列
-	queue<int> queue_consumer; //待处理的节点索引队列
+	queue<int> queue_producer; //可接收数据的结点索引队列,记录当前可用于接收网络数据报文结点链表,需接收数据时从链表中取下一个结点用于接收数据. 接收完数据后结点放入queue_consumer.
+	queue<int> queue_consumer; //待处理的结点索引队列,记录当前已接收到数据的结点链表.数据处理线程从链表中取下一个结点处理，处理完毕后将结点放回queue_producer.
 
 };
 

@@ -19,10 +19,11 @@ int tunnelReceiver(int fd_tunnel, PacketPool & tunnel_recv_packetPool) {
 	socklen_t addr_len;
 	//PacketPool packetPool; //报文缓冲池
 	PeerClientTable * ptr_peerClientTable = PeerClientTable::getInstance();
-	while (true) {
+	while (!SYSTEM_EXIT) {
 		// Read the incoming packet from the tunnel.
 		// packet来自缓冲池的空节点
-		log(log_level::DEBUG, FUN_NAME, "produce tunnel recv node");
+		if (OPEN_DEBUGLOG)
+			log(log_level::DEBUG, FUN_NAME, "produce tunnel recv node");
 		PacketNode* pkt_node = tunnel_recv_packetPool.produce(); //得到一个空闲节点		
 		if (pkt_node == NULL) {
 			//没有空闲节点
@@ -34,7 +35,8 @@ int tunnelReceiver(int fd_tunnel, PacketPool & tunnel_recv_packetPool) {
 		}
 		char * packet = pkt_node->ptr;
 		int packet_len = pkt_node->MAX_LEN;
-		log(log_level::DEBUG, FUN_NAME, "pkt_node index is:" + to_string(pkt_node->index) + ". recvfrom(fd_tunnel) data to node");
+		if (OPEN_DEBUGLOG)
+			log(log_level::DEBUG, FUN_NAME, "pkt_node index is:" + to_string(pkt_node->index) + ". recvfrom(fd_tunnel) data to node");
 		int length = recvfrom(fd_tunnel, packet, packet_len, 0, (sockaddr *) & peer_addr, &addr_len);
 		pkt_node->pkt_len = length;
 		bool dropPacket = true; //是否丢弃报文
@@ -43,7 +45,8 @@ int tunnelReceiver(int fd_tunnel, PacketPool & tunnel_recv_packetPool) {
 			char IPdotdec[20];
 			string ip = inet_ntop(AF_INET, (void *) &peer_addr.sin_addr, IPdotdec, 16);
 			int port = ntohs(peer_addr.sin_port);
-			log(log_level::DEBUG, FUN_NAME, "recv fd_tunnel length:" + to_string(length) + " from " + ip + ":" + to_string(port));
+			if (OPEN_DEBUGLOG)
+				log(log_level::DEBUG, FUN_NAME, "recv fd_tunnel length:" + to_string(length) + " from " + ip + ":" + to_string(port));
 			pkt_node->pkt_internetAddr = ip;
 			pkt_node->pkt_internetPort = port;
 			if (packet[0] == 0) {
@@ -67,5 +70,6 @@ int tunnelReceiver(int fd_tunnel, PacketPool & tunnel_recv_packetPool) {
 			tunnel_recv_packetPool.produceCompleted(pkt_node);
 		}
 	}
+	log(log_level::FATAL, FUN_NAME, "exit!");
 	return 0;
 }

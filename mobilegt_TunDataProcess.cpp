@@ -10,6 +10,7 @@
 
 int tunDataProcess(PacketPool & tunReceiver_packetPool, int socketfd_tunnel) {
 	const string FUN_NAME = "tunDataProcess";
+	const int WARN_THRESHOLD = 10000; //微秒
 	EncryptDecryptHelper * aes_helper = EncryptDecryptHelper::getInstance();
 	struct timeval sTime, eTime;
 	long exeTime;
@@ -18,6 +19,8 @@ int tunDataProcess(PacketPool & tunReceiver_packetPool, int socketfd_tunnel) {
 	while (true) {
 		PacketNode* pkt_node = tunReceiver_packetPool.consume();
 		if (pkt_node == NULL) {
+			if (SYSTEM_EXIT)
+				break;
 			//阻塞等待通知有数据?
 			//休眠然后重试
 			this_thread::sleep_for(chrono::milliseconds(100)); //std::this_thread;std::chrono;
@@ -29,9 +32,11 @@ int tunDataProcess(PacketPool & tunReceiver_packetPool, int socketfd_tunnel) {
 		if (packet_len > 0) {
 			byte lb [4];
 			intToByte(packet_len, lb);
-			log(log_level::DEBUG, FUN_NAME, "process internet response data packet. packet length is:" + to_string(packet_len));
-			//logger << "\n\trecv input packet from internet length:" << dec << length <<" length & packets:" << endl;
+			if (OPEN_DEBUGLOG)
+				log(log_level::DEBUG, FUN_NAME, "process internet response data packet. packet length is:" + to_string(packet_len));
+
 			/*
+			16进制输出加密前报文内容
 			for(int i=0;i<4;i++)
 				cout << hex << (0xFF & lb[i]) << " ";
 			cout << endl;
@@ -40,19 +45,17 @@ int tunDataProcess(PacketPool & tunReceiver_packetPool, int socketfd_tunnel) {
 			cout << endl;
 			 */
 			//encrypt packet;
-			//string plaintext(packet,0,length);
 			string strCiphertext = "";
 			gettimeofday(&sTime, NULL);
 			CryptoPP::CBC_Mode_ExternalCipher::Encryption cbcEncryption(aes_helper->aesEncryption, aes_helper->iv);
 			gettimeofday(&eTime, NULL);
 			exeTime = (eTime.tv_sec - sTime.tv_sec)*1000000 + (eTime.tv_usec - sTime.tv_usec); //exeTime 单位是微秒
-			if (exeTime > 1000)
-				log(log_level::INFO, FUN_NAME, "encrypt init exeTime:" + to_string(exeTime));
+			if (exeTime > WARN_THRESHOLD)
+				log(log_level::WARN, FUN_NAME, "encrypt init exeTime:" + to_string(exeTime));
 			gettimeofday(&sTime, NULL);
 			CryptoPP::StreamTransformationFilter stfEncryptor(cbcEncryption, new CryptoPP::StringSink(strCiphertext), CryptoPP::BlockPaddingSchemeDef::ZEROS_PADDING);
 			stfEncryptor.Put(lb, 4);
 			stfEncryptor.Put((byte*) (packet), packet_len);
-			//stfEncryptor.Put((byte*)(plaintext.c_str()),plaintext.length());
 			stfEncryptor.MessageEnd();
 
 			int iCipherTextSize = strCiphertext.size();
@@ -65,26 +68,32 @@ int tunDataProcess(PacketPool & tunReceiver_packetPool, int socketfd_tunnel) {
 			}
 			gettimeofday(&eTime, NULL);
 			exeTime = (eTime.tv_sec - sTime.tv_sec)*1000000 + (eTime.tv_usec - sTime.tv_usec); //exeTime 单位是微秒
-			if (exeTime > 1000)
-				log(log_level::INFO, FUN_NAME, "encrypt exeTime:" + to_string(exeTime));
-			//cout << endl;
-			// Write the outgoing packet to the tunnel.
-			//send(tunnel, packet, length, MSG_NOSIGNAL);
+			if (exeTime > WARN_THRESHOLD)
+				log(log_level::WARN, FUN_NAME, "encrypt exeTime:" + to_string(exeTime));
 			//依据tun ip找到需要发送的目的客户端internet ip和port
-			log(log_level::DEBUG, FUN_NAME, "find node peer. peer tun ip is:" + pkt_node->pkt_tunAddr);
+			if (OPEN_DEBUGLOG)
+				log(log_level::DEBUG, FUN_NAME, "find node peer. peer tun ip is:" + pkt_node->pkt_tunAddr);
 			PeerClient * peerClient = ptr_peerClientTable->getPeerClientByTunIP(pkt_node->pkt_tunAddr);
-			peerClient->increaseDataPktCount_recv();
-			log(log_level::DEBUG, FUN_NAME, "finded internet ip & port:" + peerClient->getPeer_internet_ip() + ":" + to_string(peerClient->getPeer_internet_port()));
+			if (peerClient != NULL) {
+				peerClient->increaseDataPktCount_recv();
+				if (OPEN_DEBUGLOG)
+					log(log_level::DEBUG, FUN_NAME, "finded internet ip & port:" + peerClient->getPeer_internet_ip() + ":" + to_string(peerClient->getPeer_internet_port()));
+			} else {
+				log(log_level::ERROR, FUN_NAME, "cannot find internet ip & port for peer tun ip:" + pkt_node->pkt_tunAddr);
+				tunReceiver_packetPool.consumeCompleted(pkt_node); //设置处理数据完毕
+				continue;
+			}
 			sockaddr_in peer_cli_addr;
 			memset(&peer_cli_addr, 0, sizeof (peer_cli_addr));
 			peer_cli_addr.sin_family = AF_INET;
 			peer_cli_addr.sin_port = htons(peerClient->getPeer_internet_port());
 			inet_pton(AF_INET, peerClient->getPeer_internet_ip().c_str(), &peer_cli_addr.sin_addr);
-			log(log_level::DEBUG, FUN_NAME, "send encryptedPacket to socketfd_tunnel. packet size:" + to_string(iCipherTextSize + 1));
+			if (OPEN_DEBUGLOG)
+				log(log_level::DEBUG, FUN_NAME, "send encryptedPacket to socketfd_tunnel. packet size:" + to_string(iCipherTextSize + 1));
 			int size = sendto(socketfd_tunnel, encryptedPacket, iCipherTextSize + 1, MSG_NOSIGNAL, (sockaddr *) & peer_cli_addr, sizeof (peer_cli_addr));
-
 		}
 		tunReceiver_packetPool.consumeCompleted(pkt_node);
 	}
+	log(log_level::FATAL, FUN_NAME, "exit!");
 	return 0;
 }
