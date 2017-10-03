@@ -70,6 +70,8 @@ int tunnelReceiver(int fd_tunnel, PacketPool & tunnel_recv_packetPool) {
 			tunnel_recv_packetPool.produceCompleted(pkt_node);
 		}
 	}
-	log(log_level::FATAL, FUN_NAME, "exit!");
+	stringstream ss;
+	ss << this_thread::get_id();
+	log(log_level::FATAL, FUN_NAME, "thread[" + ss.str() + "] exit!");
 	return 0;
 }

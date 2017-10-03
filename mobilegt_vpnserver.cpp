@@ -46,12 +46,12 @@ int main(int argc, char **argv) {
 	//// 测试打印参数配置
 	PrintConfig(conf_m);
 	auto f = conf_m.find("RUNNING_TAG");
-	string tagfileName="mobilegt.tag";//0表示终止运行,1表示正在运行
+	string tagfileName = "mobilegt.tag"; //0表示终止运行,1表示正在运行
 	if (f == conf_m.end()) {
 		log(log_level::FATAL, FUN_NAME, "NOT config RUNNING_TAG!!!!");
 	} else {
 		tagfileName = f->second;
-		log(log_level::INFO, FUN_NAME, "INIT set tagfile completed. RUNNING_TAG file is:"+tagfileName);
+		log(log_level::INFO, FUN_NAME, "INIT set tagfile completed. RUNNING_TAG file is:" + tagfileName);
 	}
 	ofstream tagFile(tagfileName.c_str(), ios::out);
 	tagFile << 1 << endl; //运行标识文件置为1
@@ -100,7 +100,7 @@ int main(int argc, char **argv) {
 	stringstream ss;
 	ss << thread_tunnel_recv.get_id();
 	log(log_level::INFO, FUN_NAME, "start thread_tunnel_recv. tunnel_port is:" + tunnel_port
-			+ ". thread id is:" + ss.str());
+			+ ". thread[" + ss.str()+"]");
 	//thread_tunnel_recv.detach();
 
 	//// 启动TUN接口监听线程
@@ -117,9 +117,10 @@ int main(int argc, char **argv) {
 	PacketPool tunIF_recv_packetPool;
 	std::thread thread_tunIF_recv(tunReceiver, fd_tun_interface, std::ref(tunIF_recv_packetPool));
 	ss.clear();
+	ss.str("");
 	ss << thread_tunIF_recv.get_id();
 	log(log_level::INFO, FUN_NAME, "start thread_tunIF_recv. tun_ifname is:" + tun_ifname
-			+ ". thread id is:" + ss.str());
+			+ ". thread[" + ss.str()+"]");
 	//thread_tunIF_recv.detach();
 
 	////
@@ -135,8 +136,9 @@ int main(int argc, char **argv) {
 		//// 
 		std::thread thread_tunnel_dataProcess(tunnelDataProcess, std::ref(tunnel_recv_packetPool), fd_tun_interface, socketfd_tunnel, std::ref(tunip_pool), std::ref(conf_m));
 		ss.clear();
+		ss.str("");
 		ss << thread_tunnel_dataProcess.get_id();
-		log(log_level::INFO, FUN_NAME, "start thread_tunnel_dataProcess. thread id is:" + ss.str());
+		log(log_level::INFO, FUN_NAME, "start thread_tunnel_dataProcess. thread[" + ss.str()+"]");
 		vec_thread_tunnel_dataProcess.push_back(std::move(thread_tunnel_dataProcess));
 		//thread_tunnel_dataProcess.detach();
 	}
@@ -148,9 +150,10 @@ int main(int argc, char **argv) {
 		//// 
 		std::thread thread_tunIF_dataProcess(tunDataProcess, std::ref(tunIF_recv_packetPool), socketfd_tunnel);
 		ss.clear();
+		ss.str("");
 		ss << thread_tunIF_dataProcess.get_id();
-		log(log_level::INFO, FUN_NAME, "start thread_tunIF_dataProcess. thread id is:" + ss.str());
-		vec_thread_tunIF_dataProcess.push_back(std::move(thread_tunIF_dataProcess));//NOTE: 必须使用move,线程对象不能拷贝只能移动
+		log(log_level::INFO, FUN_NAME, "start thread_tunIF_dataProcess. thread[" + ss.str()+"]");
+		vec_thread_tunIF_dataProcess.push_back(std::move(thread_tunIF_dataProcess)); //NOTE: 必须使用move,线程对象不能拷贝只能移动
 		//thread_tunIF_dataProcess.detach();
 	}
 
@@ -161,24 +164,24 @@ int main(int argc, char **argv) {
 		string line;
 		while (getline(inTagFile, line)) {
 			if (line == "0") {
+				log(log_level::FATAL, FUN_NAME, "VPN server prepare exit.");
 				SYSTEM_EXIT = true;
 				break;
 			}
 		}
 		inTagFile.close();
-		this_thread::sleep_for(chrono::seconds(1)); //休眠1秒再次检查
+		this_thread::sleep_for(chrono::seconds(5)); //休眠5秒再次检查
 	}
-	// 检查到系统退出标识,vpn server退出, 清理输出后关闭vpn server运行.
+	// 检查到系统退出标识,等待其它线程运行终止,然后vpn server退出, 清理输出后关闭vpn server运行.
 	//this_thread::sleep_for(chrono::seconds(5)); //休眠5秒,等待其它线程退出再退出
 	thread_tunnel_recv.join();
 	thread_tunIF_recv.join();
-	for (auto it = vec_thread_tunnel_dataProcess.begin(); it != vec_thread_tunIF_dataProcess.end(); it++)
-		if ((*it).joinable())
-			(*it).join();
-	for (auto it = vec_thread_tunIF_dataProcess.begin(); it != vec_thread_tunIF_dataProcess.end(); it++)
-		if ((*it).joinable())
-			(*it).join();
-
+	for (auto &thread : vec_thread_tunnel_dataProcess)
+		if (thread.joinable())
+			thread.join();
+	for (auto &thread : vec_thread_tunIF_dataProcess)
+		if (thread.joinable())
+			thread.join();
 	PeerClientTable * ptr_peerClientTable = PeerClientTable::getInstance();
 	unordered_map<string, PeerClient *> umap_tunip_client = ptr_peerClientTable->getUmap_tunip_client();
 	for (auto iter = umap_tunip_client.begin(); iter != umap_tunip_client.end(); iter++) {

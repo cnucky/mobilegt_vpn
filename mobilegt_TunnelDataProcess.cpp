@@ -121,7 +121,9 @@ int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interfa
 		}
 		tunnelReceiver_packetPool.consumeCompleted(pkt_node);
 	}
-	log(log_level::FATAL, FUN_NAME, "exit!");
+	stringstream ss;
+	ss << this_thread::get_id();
+	log(log_level::FATAL, FUN_NAME, "thread[" + ss.str() + "] exit!");
 	return 0;
 }
 

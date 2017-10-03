@@ -62,6 +62,8 @@ int tunReceiver(int fd_tun_interface, PacketPool & tunIF_recv_packetPool) {
 			tunIF_recv_packetPool.produceCompleted(pkt_node);
 		}
 	}
-	log(log_level::FATAL, FUN_NAME, "exit!");
+	stringstream ss;
+	ss << this_thread::get_id();
+	log(log_level::FATAL, FUN_NAME, "thread[" + ss.str() + "] exit!");
 	return 0;
 }

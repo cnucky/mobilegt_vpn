@@ -218,7 +218,7 @@ string TunIPAddrPool::assignTunIPAddr(string deviceId) {
 			ofstream outfile(assign_ip_recorder.c_str(), ios::app);
 			streampos sp = outfile.tellp();
 			if (sp <= 0)
-				outfile << "##ip_prefix.#ip_index2.#ip_index1=#deviceId" << endl;
+				outfile << "#ip_prefix.index2.index1=deviceId" << endl;
 			outfile << newip << "=" << deviceId << endl;
 			outfile.close();
 		} else {
