@@ -42,12 +42,14 @@ using namespace std;
 #include "cryptopp/modes.h"
 #include "cryptopp/filters.h"
 
+extern string LOG_DIR;
 extern string logfileNameBase;
 extern int loground[10];
 extern int cLoground;
 extern string currentLogFile;
 extern ofstream logger;
 
+extern string PROC_DIR;
 extern string secret;
 extern bool SYSTEM_EXIT;
 extern bool OPEN_DEBUGLOG;
@@ -75,7 +77,7 @@ string numToString(Type num) {
 }
 
 
-void checkLogger(string currentLogFile);
+void checkLogger();
 
 log_level getLogLevel(string str_loglevel);
 void log(log_level ll, string fun_name, string log_str, bool checkLogFile = true);
@@ -200,12 +202,12 @@ public:
 	//void setFirstConnectTime();
 	void refreshRecentConnectTime();
 	std::chrono::system_clock::time_point getRecentConnectTime();
-	void increaseDataPktCount_recv();
-	void increaseDataPktCount_send();
+	void increaseDataPktCount_recv(int count = 1);
+	void increaseDataPktCount_send(int count = 1);
 	int getDataPktCount_send() const;
 	int getDataPktCount_recv() const;
-	void increaseCmdPktCount_recv();
-	void increaseCmdPktCount_send();
+	void increaseCmdPktCount_recv(int count = 1);
+	void increaseCmdPktCount_send(int count = 1);
 	int getCmdPktCount_send() const;
 	int getCmdPktCount_recv() const;
 	void resetDataCount();
@@ -240,9 +242,12 @@ public:
 private:
 
 	PeerClientTable();
-	static PeerClientTable *single_Instance;
+	static PeerClientTable *single_Instance;	
+	//一个tunip对应一个客户端,不同的客户端使用不同的deviceId,系统依据deviceId分配不同的tunip
 	unordered_map<string, PeerClient *> umap_tunip_client;
-	unordered_map<string, PeerClient *> umap_internetip_client;
+	//internetip_port对应唯一的客户端, internetip_port=internet_ip:internet_port
+	//多个客户端可能会使用同样的internetip(例如:当多个客户端通过无线路由器上网)
+	unordered_map<string, PeerClient *> umap_internetip_port_client;
 	mutex mtx_peerClientTable;
 };
 
@@ -285,7 +290,8 @@ public:
 	void produceWithdraw(PacketNode * const pkt_node); //接收到的报文无需处理,回收空闲节点
 	PacketNode* consume(); //得到一个需要处理(即,已接收网络数据报文)的节点
 	void consumeCompleted(PacketNode * const pkt_node); //节点数据处理完毕,加入可接收数据的结点队列
-
+	int getRemainInConsumer();
+	int getReaminInProducer();
 	std::condition_variable consume_cv;
 	std::condition_variable produce_cv;
 

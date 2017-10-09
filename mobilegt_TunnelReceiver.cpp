@@ -36,7 +36,7 @@ int tunnelReceiver(int fd_tunnel, PacketPool & tunnel_recv_packetPool) {
 		char * packet = pkt_node->ptr;
 		int packet_len = pkt_node->MAX_LEN;
 		if (OPEN_DEBUGLOG)
-			log(log_level::DEBUG, FUN_NAME, "pkt_node index is:" + to_string(pkt_node->index) + ". recvfrom(fd_tunnel) data to node");
+			log(log_level::DEBUG, FUN_NAME, "pkt_node index[" + to_string(pkt_node->index) + "]. recvfrom(fd_tunnel) data to node");
 		int length = recvfrom(fd_tunnel, packet, packet_len, 0, (sockaddr *) & peer_addr, &addr_len);
 		pkt_node->pkt_len = length;
 		bool dropPacket = true; //是否丢弃报文
@@ -54,8 +54,11 @@ int tunnelReceiver(int fd_tunnel, PacketPool & tunnel_recv_packetPool) {
 				//接收线程只负责接收数据，由数据处理线程检查约定密钥,正确才发送响应报文,记录该客户端和实际互联网地址对应关系
 				//检查客户端地址是否在黑名单中
 				//TODO:黑名单限制暂无实现
-
-				dropPacket = false;
+				if (port == 0 || ip == "0.0.0.0") {
+					log(log_level::WARN, FUN_NAME, "source ip or port incorrect. " + ip + ":" + to_string(port));
+				} else {
+					dropPacket = false;
+				}
 			} else {
 				//process data messages
 				//检查客户端地址是否已在记录表中,不在则丢弃报文

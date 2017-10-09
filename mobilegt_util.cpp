@@ -55,14 +55,14 @@ log_level getLogLevel(string str_loglevel) {
 
 //// 
 //// 日志方法用到的currentLogFile也是个全局变量
-//// 全局变量,日志操作相关的两个锁变量
+//// 全局变量,日志操作相关的一个锁变量,分离出无锁版本的_log()方法,只使用一个锁变量
 //// 
 mutex mtx_log; //mtx.lock(),mtx.unlock()
-mutex mtx_checklog;
+//mutex mtx_checklog;//该锁变量取消,合并为一个锁变量
 void log(log_level ll, string fun_name, string log_str, bool checkLogFile) {
 	//如果配置文件设定日志输出级别为WARN,则ll级别为DEBUG和INFO的信息不会输出
 	if (ll >= LOG_LEVEL_SET) {
-		mtx_log.lock();
+		mtx_log.lock(); //logger上锁
 		auto logTime = chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 		//std::put_time(std::localtime(&logTime), "%F %T");
 		cout << std::put_time(std::localtime(&logTime), "%F %T") << " [" << fun_name << "] ";
@@ -91,36 +91,74 @@ void log(log_level ll, string fun_name, string log_str, bool checkLogFile) {
 		}
 		cout << log_str << endl;
 		logger << log_str << endl;
-		mtx_log.unlock();
+		mtx_log.unlock(); //释放logger锁
 		if (checkLogFile)
-			checkLogger(currentLogFile);
+			checkLogger();
 	}
 }
-
+void _log(log_level ll, string fun_name, string log_str) {
+	//如果配置文件设定日志输出级别为WARN,则ll级别为DEBUG和INFO的信息不会输出
+	if (ll >= LOG_LEVEL_SET) {
+		auto logTime = chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+		//std::put_time(std::localtime(&logTime), "%F %T");
+		cout << std::put_time(std::localtime(&logTime), "%F %T") << " [" << fun_name << "] ";
+		logger << std::put_time(std::localtime(&logTime), "%F %T") << " [" << fun_name << "] ";
+		switch (ll) {
+			case DEBUG:
+				cout << "DEBUG: ";
+				logger << "DEBUG: ";
+				break;
+			case INFO:
+				cout << "INFO: ";
+				logger << "INFO: ";
+				break;
+			case WARN:
+				cout << "WARN: ";
+				logger << "WARN: ";
+				break;
+			case ERROR:
+				cout << "ERROR: ";
+				logger << "ERROR: ";
+				break;
+			case FATAL:
+				cout << "FATAL: ";
+				logger << "FATAL: ";
+				break;
+		}
+		cout << log_str << endl;
+		logger << log_str << endl;
+	}
+}
 //// 
 //// 该方法检测日志文件是过大,过大则round robin处理
 //// 每个日志文件最大10*1024*1024即10M,超过则写入下一个日志文件
 //// 
-void checkLogger(string currentLogFile) {
-	mtx_checklog.lock();
+void checkLogger() {
+	mtx_log.lock();
 	const string FUN_NAME = "mobilegt_util-->checkLogger";
-	const bool CHECK_LOGGER = false; //必须设置为false,否则log()----checklogger()----log()死递归了
+	//已分离出一个无锁版本的_log()方法
+	//无需设置,checkLogger调用的方法log()方法是无锁版本的_log()方法
+	//const bool CHECK_LOGGER = false; //必须设置为false,否则log()----checklogger()----log()死递归了
 	if (!logger.is_open()) {
-		logger.open(currentLogFile.c_str(), ios::trunc | ios::out);
-		log(log_level::INFO, FUN_NAME, "openfile:" + currentLogFile, CHECK_LOGGER);
+		logger.open((LOG_DIR + currentLogFile).c_str(), ios::trunc | ios::out);
+		_log(log_level::INFO, FUN_NAME, "openfile:" + LOG_DIR + currentLogFile);
 	}
 	struct stat buf;
-	if (stat(currentLogFile.c_str(), &buf) < 0)
-		log(log_level::ERROR, FUN_NAME, "stat file failed:" + currentLogFile, CHECK_LOGGER);
-	if (buf.st_size > (10 * 1024 * 1024)) {
-		logger.close();
-		cLoground++;
-		cLoground %= 10;
-		currentLogFile = logfileNameBase + "." + to_string(loground[cLoground]);
-		logger.open(currentLogFile.c_str(), ios::trunc | ios::out);
-		log(log_level::INFO, FUN_NAME, "open new file" + currentLogFile, CHECK_LOGGER);
+
+	if (stat((LOG_DIR + currentLogFile).c_str(), &buf) < 0) {
+		_log(log_level::ERROR, FUN_NAME, "stat file failed:" + LOG_DIR + currentLogFile);
+	} else {
+		if (buf.st_size > (10 * 1024 * 1024)) {
+			_log(log_level::DEBUG, FUN_NAME, LOG_DIR + currentLogFile + " file size is " + to_string(buf.st_size));
+			cLoground++;
+			cLoground %= 10;
+			currentLogFile = logfileNameBase + "." + to_string(loground[cLoground]);
+			logger.close();
+			logger.open((LOG_DIR + currentLogFile).c_str(), ios::trunc | ios::out);
+			_log(log_level::INFO, FUN_NAME, "open new file " + LOG_DIR + currentLogFile);
+		}
 	}
-	mtx_checklog.unlock();
+	mtx_log.unlock();
 }
 
 //// 
@@ -136,9 +174,9 @@ TunIPAddrPool::TunIPAddrPool(string assign_ip_recorder) : assign_ip_recorder(ass
 	mtx_tunaddr_pool.lock();
 	const string FUN_NAME = "TunIPAddrPool->TunIPAddrPool";
 	log(log_level::DEBUG, FUN_NAME, "initial TunIPAddrPool");
-	ifstream infile(assign_ip_recorder.c_str());
+	ifstream infile((PROC_DIR + assign_ip_recorder).c_str());
 	if (!infile) {
-		cout << "file open error.[" << assign_ip_recorder << "]" << endl;
+		cout << "file open error.[" << PROC_DIR + assign_ip_recorder << "]" << endl;
 	}
 	//// ##ip_prefix.#ip_index2.#ip_index1=#deviceId
 	//// #开头为注释
@@ -215,7 +253,7 @@ string TunIPAddrPool::assignTunIPAddr(string deviceId) {
 			umap_deviceId_tunip[deviceId] = newip;
 			umap_tunip_deviceId[newip] = deviceId;
 			//// update assign_ip_recorder
-			ofstream outfile(assign_ip_recorder.c_str(), ios::app);
+			ofstream outfile((PROC_DIR + assign_ip_recorder).c_str(), ios::app);
 			streampos sp = outfile.tellp();
 			if (sp <= 0)
 				outfile << "#ip_prefix.index2.index1=deviceId" << endl;
@@ -315,16 +353,18 @@ std::chrono::system_clock::time_point PeerClient::getRecentConnectTime() {
 }
 
 //// 
-void PeerClient::increaseDataPktCount_recv() {
+void PeerClient::increaseDataPktCount_recv(int count) {
 	mtx_peerClient.lock();
-	dataPktCount_recv++;
+	while (count--)
+		dataPktCount_recv++;
 	mtx_peerClient.unlock();
 }
 
 //// 
-void PeerClient::increaseDataPktCount_send() {
+void PeerClient::increaseDataPktCount_send(int count) {
 	mtx_peerClient.lock();
-	dataPktCount_send++;
+	while (count--)
+		dataPktCount_send++;
 	mtx_peerClient.unlock();
 }
 
@@ -338,14 +378,16 @@ int PeerClient::getDataPktCount_send() const {
 int PeerClient::getDataPktCount_recv() const {
 	return dataPktCount_recv;
 }
-void PeerClient::increaseCmdPktCount_send() {
+void PeerClient::increaseCmdPktCount_send(int count) {
 	mtx_peerClient.lock();
-	cmdPktCount_send++;
+	while (count--)
+		cmdPktCount_send++;
 	mtx_peerClient.unlock();
 }
-void PeerClient::increaseCmdPktCount_recv() {
+void PeerClient::increaseCmdPktCount_recv(int count) {
 	mtx_peerClient.lock();
-	cmdPktCount_recv++;
+	while (count--)
+		cmdPktCount_recv++;
 	mtx_peerClient.unlock();
 }
 int PeerClient::getCmdPktCount_send() const {
@@ -386,7 +428,7 @@ PeerClientTable::~PeerClientTable() {
 		delete single_Instance;
 	}
 	umap_tunip_client.clear();
-	umap_internetip_client.clear();
+	umap_internetip_port_client.clear();
 	mtx_peerClientTable.unlock();
 }
 
@@ -420,15 +462,27 @@ int PeerClientTable::addPeerClient(string deviceId, string tun_ip, string intern
 	if (ptr_oldClient == NULL) {
 		PeerClient * p_peerClient = new PeerClient(deviceId, tun_ip, internet_ip, internet_port);
 		p_peerClient->refreshRecentConnectTime();
+		p_peerClient->increaseCmdPktCount_recv();
+		p_peerClient->increaseCmdPktCount_send(3);
 		umap_tunip_client[tun_ip] = p_peerClient;
-		umap_internetip_client[internet_ip] = p_peerClient;
+		string internetip_port = internet_ip + ":" + to_string(internet_port);
+		umap_internetip_port_client[internetip_port] = p_peerClient;
 		result = 1;
 	} else {
+		string old_internetip_port = ptr_oldClient->getPeer_internet_ip() + ":"
+				+ to_string(ptr_oldClient->getPeer_internet_port());
+		auto it = umap_internetip_port_client.find(old_internetip_port);
+		if (it != umap_tunip_client.end())
+			umap_internetip_port_client.erase(it);
 		ptr_oldClient->refreshRecentConnectTime();
 		ptr_oldClient->setPeer_deviceId(deviceId);
 		ptr_oldClient->setPeer_internet_ip(internet_ip);
 		ptr_oldClient->setPeer_internet_port(internet_port);
-		ptr_oldClient->resetDataCount();
+		string new_internetip_port = internet_ip + ":" + to_string(internet_port);
+		umap_internetip_port_client[new_internetip_port] = ptr_oldClient;
+		//ptr_oldClient->resetDataCount();
+		ptr_oldClient->increaseCmdPktCount_recv();
+		ptr_oldClient->increaseCmdPktCount_send(3);
 	}
 	mtx_peerClientTable.unlock();
 	return result;
@@ -444,10 +498,10 @@ int PeerClientTable::deletePeerClient(string tun_ip) {
 		log(log_level::DEBUG, FUN_NAME, "find tun_ip:" + tun_ip);
 	if (iter1 != umap_tunip_client.end()) {
 		PeerClient * p_peerClient = umap_tunip_client[tun_ip];
-		string internet_ip = p_peerClient->getPeer_internet_ip();
-		auto iter2 = umap_internetip_client.find(internet_ip);
-		if (iter2 != umap_internetip_client.end()) {
-			umap_internetip_client.erase(iter2);
+		string internetip_port = p_peerClient->getPeer_internet_ip() + ":" + to_string(p_peerClient->getPeer_internet_port());
+		auto iter2 = umap_internetip_port_client.find(internetip_port);
+		if (iter2 != umap_internetip_port_client.end()) {
+			umap_internetip_port_client.erase(iter2);
 		}
 		umap_tunip_client.erase(iter1);
 		if (OPEN_DEBUGLOG)
@@ -463,27 +517,23 @@ int PeerClientTable::deletePeerClient(string tun_ip) {
 bool PeerClientTable::checkPeerInternetIPandPort(string internet_ip, int port) {
 	const string FUN_NAME = "checkPeerInternetIPandPort";
 	bool succeed = false;
+	string internetip_port = internet_ip + ":" + to_string(port);
 	if (OPEN_DEBUGLOG)
-		log(log_level::DEBUG, FUN_NAME, "begin check." + internet_ip + ":" + to_string(port));
-	if (umap_internetip_client.find(internet_ip) != umap_internetip_client.end()) {
+		log(log_level::DEBUG, FUN_NAME, "begin check: " + internetip_port);
+	if (umap_internetip_port_client.find(internetip_port) != umap_internetip_port_client.end()) {
 		if (OPEN_DEBUGLOG)
-			log(log_level::DEBUG, FUN_NAME, "finded " + internet_ip + ".begin check time and port");
-		PeerClient * p_peerClient = umap_internetip_client[internet_ip];
+			log(log_level::DEBUG, FUN_NAME, "finded " + internetip_port + ". begin check time");
+		PeerClient * p_peerClient = umap_internetip_port_client[internetip_port];
 
 		std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
 		std::chrono::system_clock::time_point recent = p_peerClient->getRecentConnectTime();
 		//// 30minute * 60second/minute
 		//// 最近连接时间不超过30分钟
 		int tt = std::chrono::duration_cast<std::chrono::seconds>(now - recent).count();
-		int finded_port = p_peerClient->getPeer_internet_port();
-		if (OPEN_DEBUGLOG)
-			log(log_level::DEBUG, FUN_NAME, "finded port is:" + to_string(finded_port) + ".time duration seconds is:" + to_string(tt));
 		if (tt <= 30 * 60) {
-			if (p_peerClient->getPeer_internet_port() == port) {
-				succeed = true;
-				p_peerClient->refreshRecentConnectTime();
-				p_peerClient->increaseDataPktCount_send();
-			}
+			succeed = true;
+			p_peerClient->refreshRecentConnectTime();
+			p_peerClient->increaseDataPktCount_send();
 		}
 	}
 	return succeed;
@@ -576,4 +626,9 @@ void PacketPool::consumeCompleted(PacketNode * const pkt_node) {
 	mtx_queue_producer.unlock();
 	consume_cv.notify_all(); // 条件变量,唤醒所有线程.
 }
-
+int PacketPool::getRemainInConsumer() {
+	return queue_consumer.size();
+}
+int PacketPool::getReaminInProducer() {
+	return queue_producer.size();
+}

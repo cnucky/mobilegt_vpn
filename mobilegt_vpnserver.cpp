@@ -20,7 +20,7 @@ using namespace std;
 /*
  * 解析命令参数,启动vpn服务
  */
-
+string LOG_DIR = "log/";
 string logfileNameBase = "mobilegt_vpn_";
 int loground[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
 int cLoground = 0;
@@ -30,6 +30,8 @@ ofstream logger;
 string secret = "test0";
 bool SYSTEM_EXIT = false;
 bool OPEN_DEBUGLOG = false;
+
+string PROC_DIR = "proc/";
 
 void usage(char **argv);
 static int get_tunnel(const char *port);
@@ -53,7 +55,7 @@ int main(int argc, char **argv) {
 		tagfileName = f->second;
 		log(log_level::INFO, FUN_NAME, "INIT set tagfile completed. RUNNING_TAG file is:" + tagfileName);
 	}
-	ofstream tagFile(tagfileName.c_str(), ios::out);
+	ofstream tagFile((PROC_DIR + tagfileName).c_str(), ios::out);
 	tagFile << 1 << endl; //运行标识文件置为1
 	tagFile.close();
 
@@ -65,7 +67,7 @@ int main(int argc, char **argv) {
 	//// append方法或+运算均可以,之前编译出错是由于函数模板分离编译所致,并非string+运算使用错误
 	//// currentLogFile = logfileNameBase.append(".").append(numToString(loground[cLoground]));	
 	currentLogFile = logfileNameBase + "." + numToString(loground[cLoground]); //第一个日志文件为$logfileNameBase.0
-	checkLogger(currentLogFile);
+	checkLogger();
 
 	f = conf_m.find("SECRET");
 	if (f == conf_m.end()) {
@@ -100,7 +102,7 @@ int main(int argc, char **argv) {
 	stringstream ss;
 	ss << thread_tunnel_recv.get_id();
 	log(log_level::INFO, FUN_NAME, "start thread_tunnel_recv. tunnel_port is:" + tunnel_port
-			+ ". thread[" + ss.str()+"]");
+			+ ". thread[" + ss.str() + "]");
 	//thread_tunnel_recv.detach();
 
 	//// 启动TUN接口监听线程
@@ -120,7 +122,7 @@ int main(int argc, char **argv) {
 	ss.str("");
 	ss << thread_tunIF_recv.get_id();
 	log(log_level::INFO, FUN_NAME, "start thread_tunIF_recv. tun_ifname is:" + tun_ifname
-			+ ". thread[" + ss.str()+"]");
+			+ ". thread[" + ss.str() + "]");
 	//thread_tunIF_recv.detach();
 
 	////
@@ -138,7 +140,7 @@ int main(int argc, char **argv) {
 		ss.clear();
 		ss.str("");
 		ss << thread_tunnel_dataProcess.get_id();
-		log(log_level::INFO, FUN_NAME, "start thread_tunnel_dataProcess. thread[" + ss.str()+"]");
+		log(log_level::INFO, FUN_NAME, "start thread_tunnel_dataProcess. thread[" + ss.str() + "]");
 		vec_thread_tunnel_dataProcess.push_back(std::move(thread_tunnel_dataProcess));
 		//thread_tunnel_dataProcess.detach();
 	}
@@ -152,7 +154,7 @@ int main(int argc, char **argv) {
 		ss.clear();
 		ss.str("");
 		ss << thread_tunIF_dataProcess.get_id();
-		log(log_level::INFO, FUN_NAME, "start thread_tunIF_dataProcess. thread[" + ss.str()+"]");
+		log(log_level::INFO, FUN_NAME, "start thread_tunIF_dataProcess. thread[" + ss.str() + "]");
 		vec_thread_tunIF_dataProcess.push_back(std::move(thread_tunIF_dataProcess)); //NOTE: 必须使用move,线程对象不能拷贝只能移动
 		//thread_tunIF_dataProcess.detach();
 	}
@@ -160,7 +162,7 @@ int main(int argc, char **argv) {
 	//// 主线程进入循环判断
 	while (!SYSTEM_EXIT) {
 		//检查系统退出文件标识
-		ifstream inTagFile(tagfileName);
+		ifstream inTagFile((PROC_DIR + tagfileName).c_str());
 		string line;
 		while (getline(inTagFile, line)) {
 			if (line == "0") {
@@ -184,6 +186,8 @@ int main(int argc, char **argv) {
 			thread.join();
 	PeerClientTable * ptr_peerClientTable = PeerClientTable::getInstance();
 	unordered_map<string, PeerClient *> umap_tunip_client = ptr_peerClientTable->getUmap_tunip_client();
+	log(log_level::FATAL, FUN_NAME, "Peer_deviceId:Peer_tun_ip:DataPktCount_send(CmdPktCount_send):DataPktCount_recv(CmdPktCount_recv)");
+
 	for (auto iter = umap_tunip_client.begin(); iter != umap_tunip_client.end(); iter++) {
 		PeerClient * ptr_pc = iter->second;
 		log(log_level::FATAL, FUN_NAME, ptr_pc->getPeer_deviceId() + ":" + ptr_pc->getPeer_tun_ip() + ":"

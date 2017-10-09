@@ -27,6 +27,9 @@ int tunDataProcess(PacketPool & tunReceiver_packetPool, int socketfd_tunnel) {
 			continue;
 		}
 		//process pkt_node里面的数据
+		if (OPEN_DEBUGLOG)
+			log(log_level::DEBUG, FUN_NAME, "consume TUN recv node. pkt_node index["
+				+ to_string(pkt_node->index) + "] remain:" + to_string(tunReceiver_packetPool.getRemainInConsumer()));
 		char* packet = pkt_node->ptr;
 		int packet_len = pkt_node->pkt_len;
 		if (packet_len > 0) {
@@ -51,7 +54,7 @@ int tunDataProcess(PacketPool & tunReceiver_packetPool, int socketfd_tunnel) {
 			gettimeofday(&eTime, NULL);
 			exeTime = (eTime.tv_sec - sTime.tv_sec)*1000000 + (eTime.tv_usec - sTime.tv_usec); //exeTime 单位是微秒
 			if (exeTime > WARN_THRESHOLD)
-				log(log_level::WARN, FUN_NAME, "encrypt init exeTime:" + to_string(exeTime));
+				log(log_level::WARN, FUN_NAME, "encrypt init exeTime:" + to_string(exeTime) + " microseconds");
 			gettimeofday(&sTime, NULL);
 			CryptoPP::StreamTransformationFilter stfEncryptor(cbcEncryption, new CryptoPP::StringSink(strCiphertext), CryptoPP::BlockPaddingSchemeDef::ZEROS_PADDING);
 			stfEncryptor.Put(lb, 4);

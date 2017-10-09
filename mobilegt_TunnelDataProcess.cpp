@@ -29,6 +29,9 @@ int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interfa
 			continue;
 		}
 		//process pkt_node里面的数据
+		if (OPEN_DEBUGLOG)
+			log(log_level::DEBUG, FUN_NAME, "consume tunnel recv node. pkt_node index["
+				+ to_string(pkt_node->index) + "] remain:" + to_string(tunnelReceiver_packetPool.getRemainInConsumer()));
 		char* packet = pkt_node->ptr;
 		int packet_len = pkt_node->pkt_len;
 		if (packet[0] != 0) {
@@ -39,7 +42,7 @@ int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interfa
 			gettimeofday(&eTime, NULL);
 			exeTime = (eTime.tv_sec - sTime.tv_sec)*1000000 + (eTime.tv_usec - sTime.tv_usec); //exeTime 单位是微秒
 			if (exeTime > WARN_THRESHOLD)
-				log(log_level::WARN, FUN_NAME, "decrypt init exeTime:" + to_string(exeTime));
+				log(log_level::WARN, FUN_NAME, "decrypt init exeTime:" + to_string(exeTime)+" microseconds");
 
 			//// decrypt packet;
 			std::string strDecryptedText = "";
@@ -88,7 +91,8 @@ int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interfa
 			//不是数据报文,而是建立建立连接命令报文,检查约定的密钥是否正确,正确则记录该客户端,并向该客户端发送响应报文
 			//手机客户端命令报文数据格式为[0][sharedsecret][:][deviceId]
 			if (OPEN_DEBUGLOG)
-				log(log_level::DEBUG, FUN_NAME, "process cmd packet. pkt_length:" + to_string(packet_len));
+				log(log_level::DEBUG, FUN_NAME, "process cmd packet from " + pkt_node->pkt_internetAddr
+					+ ":" + to_string(pkt_node->pkt_internetPort) + ". pkt_length:" + to_string(packet_len));
 			string str_recv_pkt1, str_recv_deviceId, str_recv_secret;
 			str_recv_pkt1.append(&packet[1], packet_len - 1); //skip packet[0]
 			string secret_delimiter = ":";
@@ -105,6 +109,8 @@ int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interfa
 				int internet_port = pkt_node->pkt_internetPort;
 				//PeerClient * peerClient = new PeerClient(deviceId, tun_ip, internet_ip, internet_port);
 				//ptr_peerClientTable->addPeerClient(tun_ip, peerClient);
+				log(log_level::INFO, FUN_NAME, "add PeerClient[" + deviceId + ":" + tun_ip + "-"
+						+ internet_ip + ":" + to_string(internet_port) + "]");
 				ptr_peerClientTable->addPeerClient(deviceId, tun_ip, internet_ip, internet_port);
 				//验证通过,发送响应报文,包括tun私有地址,dns地址等信息,发送三次
 				char parameters[1024];
