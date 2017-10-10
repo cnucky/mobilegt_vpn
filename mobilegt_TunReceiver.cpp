@@ -51,6 +51,7 @@ int tunReceiver(int fd_tun_interface, PacketPool & tunIF_recv_packetPool) {
 			memcpy((void*) &addr_dst.s_addr, &packet[16], sizeof (in_addr));
 			inet_ntop(AF_INET, (void *) &addr_dst, dstIPdotdec, 16);
 			pkt_node->pkt_tunAddr = dstIPdotdec;
+			pkt_node->timestamp = std::chrono::system_clock::now();
 			if (OPEN_DEBUGLOG)
 				log(log_level::DEBUG, FUN_NAME, "recv fd_tun_interface data to " + pkt_node->pkt_tunAddr);
 			//置条件变量为有数据到达，触发其它线程将缓存池中的数据发送给对应的客户端
@@ -60,6 +61,9 @@ int tunReceiver(int fd_tun_interface, PacketPool & tunIF_recv_packetPool) {
 			tunIF_recv_packetPool.produceWithdraw(pkt_node);
 		} else {
 			tunIF_recv_packetPool.produceCompleted(pkt_node);
+			if (OPEN_DEBUGLOG)
+				log(log_level::DEBUG, FUN_NAME, "check point[produceCompleted] packet duration:" + to_string(pkt_node->getPktNodeDurationMicroseconds().count()) + " microseconds.");
+
 		}
 	}
 	stringstream ss;

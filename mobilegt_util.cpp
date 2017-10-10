@@ -65,32 +65,32 @@ void log(log_level ll, string fun_name, string log_str, bool checkLogFile) {
 		mtx_log.lock(); //logger上锁
 		auto logTime = chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 		//std::put_time(std::localtime(&logTime), "%F %T");
-		cout << std::put_time(std::localtime(&logTime), "%F %T") << " [" << fun_name << "] ";
-		logger << std::put_time(std::localtime(&logTime), "%F %T") << " [" << fun_name << "] ";
+		cout << std::put_time(std::localtime(&logTime), "%F %T") << " ";
+		logger << std::put_time(std::localtime(&logTime), "%F %T") << " ";
 		switch (ll) {
 			case DEBUG:
-				cout << "DEBUG: ";
-				logger << "DEBUG: ";
+				cout << "DEBUG:";
+				logger << "DEBUG:";
 				break;
 			case INFO:
-				cout << "INFO: ";
-				logger << "INFO: ";
+				cout << "INFO:";
+				logger << "INFO:";
 				break;
 			case WARN:
-				cout << "WARN: ";
-				logger << "WARN: ";
+				cout << "WARN:";
+				logger << "WARN:";
 				break;
 			case ERROR:
-				cout << "ERROR: ";
-				logger << "ERROR: ";
+				cout << "ERROR:";
+				logger << "ERROR:";
 				break;
 			case FATAL:
-				cout << "FATAL: ";
-				logger << "FATAL: ";
+				cout << "FATAL:";
+				logger << "FATAL:";
 				break;
 		}
-		cout << log_str << endl;
-		logger << log_str << endl;
+		cout << " [" << fun_name << "] " << log_str << endl;
+		logger << " [" << fun_name << "] " << log_str << endl;
 		mtx_log.unlock(); //释放logger锁
 		if (checkLogFile)
 			checkLogger();
@@ -101,32 +101,32 @@ void _log(log_level ll, string fun_name, string log_str) {
 	if (ll >= LOG_LEVEL_SET) {
 		auto logTime = chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 		//std::put_time(std::localtime(&logTime), "%F %T");
-		cout << std::put_time(std::localtime(&logTime), "%F %T") << " [" << fun_name << "] ";
-		logger << std::put_time(std::localtime(&logTime), "%F %T") << " [" << fun_name << "] ";
+		cout << std::put_time(std::localtime(&logTime), "%F %T") << " ";
+		logger << std::put_time(std::localtime(&logTime), "%F %T") << " ";
 		switch (ll) {
 			case DEBUG:
-				cout << "DEBUG: ";
-				logger << "DEBUG: ";
+				cout << "DEBUG:";
+				logger << "DEBUG:";
 				break;
 			case INFO:
-				cout << "INFO: ";
-				logger << "INFO: ";
+				cout << "INFO:";
+				logger << "INFO:";
 				break;
 			case WARN:
-				cout << "WARN: ";
-				logger << "WARN: ";
+				cout << "WARN:";
+				logger << "WARN:";
 				break;
 			case ERROR:
-				cout << "ERROR: ";
-				logger << "ERROR: ";
+				cout << "ERROR:";
+				logger << "ERROR:";
 				break;
 			case FATAL:
-				cout << "FATAL: ";
-				logger << "FATAL: ";
+				cout << "FATAL:";
+				logger << "FATAL:";
 				break;
 		}
-		cout << log_str << endl;
-		logger << log_str << endl;
+		cout << " [" << fun_name << "] " << log_str << endl;
+		logger << " [" << fun_name << "] " << log_str << endl;
 	}
 }
 //// 
@@ -548,10 +548,13 @@ unordered_map<string, PeerClient*> PeerClientTable::getUmap_tunip_client() const
 PacketNode::PacketNode(int nodeIndex) : index(nodeIndex) {
 	ptr = new char[MAX_LEN];
 	pkt_len = 0;
-	timestamp = 0;
 }
 PacketNode::~PacketNode() {
 	delete[] ptr;
+}
+std::chrono::microseconds PacketNode::getPktNodeDurationMicroseconds() {
+	auto pktNode_d = std::chrono::system_clock::now() - timestamp;
+	return std::chrono::duration_cast<std::chrono::microseconds>(pktNode_d);
 }
 
 //// 

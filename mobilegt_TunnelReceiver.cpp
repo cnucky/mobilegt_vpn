@@ -49,6 +49,7 @@ int tunnelReceiver(int fd_tunnel, PacketPool & tunnel_recv_packetPool) {
 				log(log_level::DEBUG, FUN_NAME, "recv fd_tunnel length:" + to_string(length) + " from " + ip + ":" + to_string(port));
 			pkt_node->pkt_internetAddr = ip;
 			pkt_node->pkt_internetPort = port;
+			pkt_node->timestamp = std::chrono::system_clock::now();
 			if (packet[0] == 0) {
 				//process control messages
 				//接收线程只负责接收数据，由数据处理线程检查约定密钥,正确才发送响应报文,记录该客户端和实际互联网地址对应关系
@@ -71,6 +72,8 @@ int tunnelReceiver(int fd_tunnel, PacketPool & tunnel_recv_packetPool) {
 			tunnel_recv_packetPool.produceWithdraw(pkt_node);
 		} else {
 			tunnel_recv_packetPool.produceCompleted(pkt_node);
+			if (OPEN_DEBUGLOG)
+				log(log_level::DEBUG, FUN_NAME, "check point[consumeCompleted] packet duration:" + to_string(pkt_node->getPktNodeDurationMicroseconds().count()) + " microseconds.");
 		}
 	}
 	stringstream ss;

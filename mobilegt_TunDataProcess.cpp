@@ -23,9 +23,11 @@ int tunDataProcess(PacketPool & tunReceiver_packetPool, int socketfd_tunnel) {
 				break;
 			//阻塞等待通知有数据?
 			//休眠然后重试
-			this_thread::sleep_for(chrono::milliseconds(100)); //std::this_thread;std::chrono;
+			this_thread::sleep_for(chrono::milliseconds(10)); //std::this_thread;std::chrono;
 			continue;
 		}
+		if (OPEN_DEBUGLOG)
+			log(log_level::DEBUG, FUN_NAME, "check point[consume] packet duration:" + to_string(pkt_node->getPktNodeDurationMicroseconds().count()) + " microseconds.");
 		//process pkt_node里面的数据
 		if (OPEN_DEBUGLOG)
 			log(log_level::DEBUG, FUN_NAME, "consume TUN recv node. pkt_node index["
@@ -92,8 +94,15 @@ int tunDataProcess(PacketPool & tunReceiver_packetPool, int socketfd_tunnel) {
 			peer_cli_addr.sin_port = htons(peerClient->getPeer_internet_port());
 			inet_pton(AF_INET, peerClient->getPeer_internet_ip().c_str(), &peer_cli_addr.sin_addr);
 			if (OPEN_DEBUGLOG)
-				log(log_level::DEBUG, FUN_NAME, "send encryptedPacket to socketfd_tunnel. packet size:" + to_string(iCipherTextSize + 1));
+				log(log_level::DEBUG, FUN_NAME, "send encryptedPacket to socketfd_tunnel. packet size:"
+					+ to_string(iCipherTextSize + 1));
+			if (OPEN_DEBUGLOG)
+				log(log_level::DEBUG, FUN_NAME, "check point[before sendto] packet duration:" + to_string(pkt_node->getPktNodeDurationMicroseconds().count()) + " microseconds.");
+
 			int size = sendto(socketfd_tunnel, encryptedPacket, iCipherTextSize + 1, MSG_NOSIGNAL, (sockaddr *) & peer_cli_addr, sizeof (peer_cli_addr));
+			if (OPEN_DEBUGLOG)
+				log(log_level::DEBUG, FUN_NAME, "check point[sendto] packet duration:" + to_string(pkt_node->getPktNodeDurationMicroseconds().count()) + " microseconds.");
+
 		}
 		tunReceiver_packetPool.consumeCompleted(pkt_node);
 	}

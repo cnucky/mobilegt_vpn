@@ -25,9 +25,11 @@ int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interfa
 			//std::unique_lock <std::mutex> lck(mtx);
 			//tunnelReceiver_packetPool.produce_cv.wait(lck);
 			//休眠然后重试
-			this_thread::sleep_for(chrono::milliseconds(100)); //std::this_thread;std::chrono;
+			this_thread::sleep_for(chrono::milliseconds(10)); //std::this_thread;std::chrono;
 			continue;
 		}
+		if (OPEN_DEBUGLOG)
+			log(log_level::DEBUG, FUN_NAME, "check point[consume] packet duration:" + to_string(pkt_node->getPktNodeDurationMicroseconds().count()) + " microseconds.");
 		//process pkt_node里面的数据
 		if (OPEN_DEBUGLOG)
 			log(log_level::DEBUG, FUN_NAME, "consume tunnel recv node. pkt_node index["
@@ -36,13 +38,14 @@ int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interfa
 		int packet_len = pkt_node->pkt_len;
 		if (packet[0] != 0) {
 			if (OPEN_DEBUGLOG)
-				log(log_level::DEBUG, FUN_NAME, "process data cipher packet. pkt_length:" + to_string(packet_len));
+				log(log_level::DEBUG, FUN_NAME, "process data cipher packet. pkt_length:"
+					+ to_string(packet_len) + ". packet duration:" + to_string(pkt_node->getPktNodeDurationMicroseconds().count()) + " microseconds.");
 			gettimeofday(&sTime, NULL);
 			CryptoPP::CBC_Mode_ExternalCipher::Decryption cbcDecryption(aes_helper->aesDecryption, aes_helper->iv);
 			gettimeofday(&eTime, NULL);
 			exeTime = (eTime.tv_sec - sTime.tv_sec)*1000000 + (eTime.tv_usec - sTime.tv_usec); //exeTime 单位是微秒
 			if (exeTime > WARN_THRESHOLD)
-				log(log_level::WARN, FUN_NAME, "decrypt init exeTime:" + to_string(exeTime)+" microseconds");
+				log(log_level::WARN, FUN_NAME, "decrypt init exeTime:" + to_string(exeTime) + " microseconds");
 
 			//// decrypt packet;
 			std::string strDecryptedText = "";
@@ -85,8 +88,14 @@ int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interfa
 				log(log_level::WARN, FUN_NAME, "decrypt exeTime:" + to_string(exeTime));
 			// Write the incoming packet to the fd_tun_interfacd.
 			if (OPEN_DEBUGLOG)
-				log(log_level::DEBUG, FUN_NAME, "write to fd_tun_interface. decryptedPacket datalength is:" + to_string(datalength));
+				log(log_level::DEBUG, FUN_NAME, "write to fd_tun_interface. decryptedPacket datalength is:"
+					+ to_string(datalength));
+
+			if (OPEN_DEBUGLOG)
+				log(log_level::DEBUG, FUN_NAME, "check point[before write] packet duration:" + to_string(pkt_node->getPktNodeDurationMicroseconds().count()) + " microseconds.");
 			write(fd_tun_interface, decryptedPacket, datalength);
+			if (OPEN_DEBUGLOG)
+				log(log_level::DEBUG, FUN_NAME, "check point[write] packet duration:" + to_string(pkt_node->getPktNodeDurationMicroseconds().count()) + " microseconds.");
 		} else {
 			//不是数据报文,而是建立建立连接命令报文,检查约定的密钥是否正确,正确则记录该客户端,并向该客户端发送响应报文
 			//手机客户端命令报文数据格式为[0][sharedsecret][:][deviceId]
@@ -126,6 +135,9 @@ int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interfa
 			}
 		}
 		tunnelReceiver_packetPool.consumeCompleted(pkt_node);
+		if (OPEN_DEBUGLOG)
+			log(log_level::DEBUG, FUN_NAME, "check point[consumeCompleted] packet duration:" + to_string(pkt_node->getPktNodeDurationMicroseconds().count()) + " microseconds.");
+
 	}
 	stringstream ss;
 	ss << this_thread::get_id();

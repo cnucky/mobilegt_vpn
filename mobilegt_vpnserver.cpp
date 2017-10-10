@@ -125,13 +125,32 @@ int main(int argc, char **argv) {
 			+ ". thread[" + ss.str() + "]");
 	//thread_tunIF_recv.detach();
 
+	string tunnel_pallel = "10";
+	f = conf_m.find("tunnel_pallel");
+	if (f == conf_m.end()) {
+		log(log_level::FATAL, FUN_NAME, "NOT config tunnel_pallel!!!!");
+	} else {
+		tunnel_pallel = f->second;
+		log(log_level::INFO, FUN_NAME, "INIT set tunnel_pallel : " + tunnel_pallel);
+	}
+	int tunnel_pallel_num = atoi(tunnel_pallel.c_str());
+	string tun_pallel = "10";
+	f = conf_m.find("tun_pallel");
+	if (f == conf_m.end()) {
+		log(log_level::FATAL, FUN_NAME, "NOT config tun_pallel!!!!");
+	} else {
+		tun_pallel = f->second;
+		log(log_level::INFO, FUN_NAME, "INIT set tun_pallel : " + tun_pallel);
+	}
+	int tun_pallel_num = atoi(tun_pallel.c_str());
+	////
 	////
 	//// 启动多个线程处理两个缓冲池池里面的数据
 	//// tunnel_recv_packetPool
 	//// tunIF_recv_packetPool
 	////
 	vector<thread> vec_thread_tunnel_dataProcess;
-	for (int i = 0; i < 1; i++) {
+	for (int i = 0; i < tunnel_pallel_num; i++) {
 
 		//// 启动线程处理tunnel socket接收到的数据,接收到的数据通过tun接口转发到internet
 		//// 或者是初次连接数据,通过socket将tunnel配置信息数据发给客户端
@@ -147,7 +166,7 @@ int main(int argc, char **argv) {
 	//// tunIF_recv_packetPool
 	////
 	vector<thread> vec_thread_tunIF_dataProcess;
-	for (int i = 0; i < 1; i++) {
+	for (int i = 0; i < tun_pallel_num; i++) {
 		//// 启动线程处理tun接口接收的数据,tun接收到的数据通过socket发给客户端
 		//// 
 		std::thread thread_tunIF_dataProcess(tunDataProcess, std::ref(tunIF_recv_packetPool), socketfd_tunnel);
@@ -158,7 +177,7 @@ int main(int argc, char **argv) {
 		vec_thread_tunIF_dataProcess.push_back(std::move(thread_tunIF_dataProcess)); //NOTE: 必须使用move,线程对象不能拷贝只能移动
 		//thread_tunIF_dataProcess.detach();
 	}
-
+	log(log_level::INFO, FUN_NAME, "VPN server start completed.");
 	//// 主线程进入循环判断
 	while (!SYSTEM_EXIT) {
 		//检查系统退出文件标识
@@ -202,7 +221,7 @@ int main(int argc, char **argv) {
 //// 启动服务端口socket
 ////
 static int get_tunnel(const char * tunnel_port) {
-
+	string FUN_NAME = "main-->get_tunnel";
 	// We use an IPv4 socket.
 	int fd_tunnel_socket = socket(AF_INET, SOCK_DGRAM, 0);
 	int flag = 1;
@@ -218,6 +237,7 @@ static int get_tunnel(const char * tunnel_port) {
 	// Call bind(2) in a loop since Linux does not have SO_REUSEPORT.
 	while (bind(fd_tunnel_socket, (sockaddr *) & addr, sizeof (addr))) {
 		if (errno != EADDRINUSE) {
+			log(log_level::FATAL, FUN_NAME, "bind fd_tunnel_socket error. fd_tunnel_socket:" + to_string(fd_tunnel_socket));
 			return -1;
 		}
 		usleep(100000);
@@ -228,7 +248,7 @@ static int get_tunnel(const char * tunnel_port) {
 	//// 旧版程序一个客户端只有一个主进程同时处理tunnel和TUN的数据，需要设置为非阻塞模式，否则阻塞在tunnel接收则无法接收处理TUN的数据
 	// Put the tunnel into non-blocking mode.
 	//fcntl(tunnel, F_SETFL, O_NONBLOCK);
-
+	log(log_level::INFO, FUN_NAME, "fd_tunnel_socket[" + to_string(fd_tunnel_socket) + "]");
 	return fd_tunnel_socket;
 }
 
@@ -236,7 +256,7 @@ static int get_tunnel(const char * tunnel_port) {
 //// 
 static int get_tun_interface(const char * tun_name) {
 	//int interface = open("/dev/net/tun", O_RDWR | O_NONBLOCK);
-	string FUN_NAME = "get_tun_interface";
+	string FUN_NAME = "main-->get_tun_interface";
 	int fd_interface_tun = open("/dev/net/tun", O_RDWR);
 	ifreq ifr;
 	memset(&ifr, 0, sizeof (ifr));
@@ -247,7 +267,7 @@ static int get_tun_interface(const char * tun_name) {
 		log(log_level::FATAL, FUN_NAME, "Cannot get TUN interface");
 		exit(1);
 	}
-
+	log(log_level::INFO, FUN_NAME, "fd_interface_tun[" + to_string(fd_interface_tun) + "]");
 	return fd_interface_tun;
 }
 

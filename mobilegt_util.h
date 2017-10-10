@@ -30,6 +30,7 @@
 #include <sstream>
 #include <string>
 #include <chrono>
+#include <ratio>
 #include <unordered_map>  //std::unordered_map
 #include <vector>    //std::vector
 #include <queue>                //std::queue
@@ -266,11 +267,11 @@ public:
 	const int MAX_LEN = 2048; //每个节点可存放数据报文的最大长度
 	int pkt_len; //网络数据报文长度
 	const int index; //记录本节点在缓冲池中的索引编号,一旦初始化则不能再修改
-	long timestamp; //记录节点数据报文接收时间标记
+	std::chrono::system_clock::time_point timestamp; //记录节点数据报文接收时间标记
 	string pkt_tunAddr; //对于tun_interface接收的数据需记录目的地址(tun_interface地址),后续处理报文需依据这个地址找到客户端internet地址
 	string pkt_internetAddr; //记录节点数据报文来源IP地址,只用于记录手机客户端的ip
 	int pkt_internetPort; //记录节点数据报文来源端口,只用于记录手机客户端的端口
-
+	std::chrono::microseconds getPktNodeDurationMicroseconds();//获取报文数据到当前时间的时间间隔,便于观察一个报文从接收到发送的处理时间延迟
 	PacketNode(int nodeIndex);
 
 	~PacketNode();
