@@ -13,30 +13,28 @@
  * 如果是未通过连接验证的发送端，丢弃数据(是否需要通知客户端重新连接验证？以及未来需要添加简单防御攻击措施)
  * 
  */
-int tunnelReceiver(int fd_tunnel, PacketPool & tunnel_recv_packetPool) {
+int tunnelReceiver(int fd_tunnel, PacketPool & tunnel_recv_packetPool, CacheLogger & cLogger) {
 	const string FUN_NAME = "tunnelReceiver";
 	sockaddr_in peer_addr;
 	socklen_t addr_len;
 	//PacketPool packetPool; //报文缓冲池
-	PeerClientTable * ptr_peerClientTable = PeerClientTable::getInstance();
 	while (!SYSTEM_EXIT) {
 		// Read the incoming packet from the tunnel.
 		// packet来自缓冲池的空节点
-		if (OPEN_DEBUGLOG)
-			log(log_level::DEBUG, FUN_NAME, "produce tunnel recv node");
+		cLogger.log(log_level::DEBUG, FUN_NAME, "produce tunnel recv node");
 		PacketNode* pkt_node = tunnel_recv_packetPool.produce(); //得到一个空闲节点		
 		if (pkt_node == NULL) {
 			//没有空闲节点
 			//告警,缓冲池满,没有多余的空闲节点
 			//暂停100毫秒
-			log(log_level::WARN, FUN_NAME, "tunnel_recv_packetPool.produce() is NULL.");
-			this_thread::sleep_for(chrono::milliseconds(100)); //std::this_thread;std::chrono;
+			cLogger.log(log_level::WARN, FUN_NAME, "tunnel_recv_packetPool.produce() is NULL.");
+			//新版本produce添加了条件变量的wait(),无需在此处休眠
+			//this_thread::sleep_for(chrono::milliseconds(100)); //std::this_thread;std::chrono;
 			continue; //进入下一次循环而不进入读取网络数据报文的阻塞调用
 		}
 		char * packet = pkt_node->ptr;
 		int packet_len = pkt_node->MAX_LEN;
-		if (OPEN_DEBUGLOG)
-			log(log_level::DEBUG, FUN_NAME, "pkt_node index[" + to_string(pkt_node->index) + "]. recvfrom(fd_tunnel) data to node");
+		cLogger.log(log_level::DEBUG, FUN_NAME, "pkt_node index[" + to_string(pkt_node->index) + "]. recvfrom(fd_tunnel) data to node");
 		int length = recvfrom(fd_tunnel, packet, packet_len, 0, (sockaddr *) & peer_addr, &addr_len);
 		pkt_node->pkt_len = length;
 		bool dropPacket = true; //是否丢弃报文
@@ -45,39 +43,37 @@ int tunnelReceiver(int fd_tunnel, PacketPool & tunnel_recv_packetPool) {
 			char IPdotdec[20];
 			string ip = inet_ntop(AF_INET, (void *) &peer_addr.sin_addr, IPdotdec, 16);
 			int port = ntohs(peer_addr.sin_port);
-			if (OPEN_DEBUGLOG)
-				log(log_level::DEBUG, FUN_NAME, "recv fd_tunnel length:" + to_string(length) + " from " + ip + ":" + to_string(port));
+			cLogger.log(log_level::DEBUG, FUN_NAME, "recv fd_tunnel length:" + to_string(length) + " from " + ip + ":" + to_string(port));
 			pkt_node->pkt_internetAddr = ip;
 			pkt_node->pkt_internetPort = port;
-			pkt_node->timestamp = std::chrono::system_clock::now();
+			pkt_node->timestamp = std::chrono::system_clock::now(); //记录报文接收时间
 			if (packet[0] == 0) {
 				//process control messages
 				//接收线程只负责接收数据，由数据处理线程检查约定密钥,正确才发送响应报文,记录该客户端和实际互联网地址对应关系
 				//检查客户端地址是否在黑名单中
 				//TODO:黑名单限制暂无实现
 				if (port == 0 || ip == "0.0.0.0") {
-					log(log_level::WARN, FUN_NAME, "source ip or port incorrect. " + ip + ":" + to_string(port));
+					cLogger.log(log_level::WARN, FUN_NAME, "source ip or port incorrect. " + ip + ":" + to_string(port));
 				} else {
 					dropPacket = false;
 				}
 			} else {
 				//process data messages
-				//检查客户端地址是否已在记录表中,不在则丢弃报文
-				if (ptr_peerClientTable->checkPeerInternetIPandPort(ip, port))
-					dropPacket = false;
+				//由数据处理线程处理
+				dropPacket = false;
 			}
 		}
 		if (dropPacket) {
-			log(log_level::WARN, FUN_NAME, "drop Packet.");
+			cLogger.log(log_level::WARN, FUN_NAME, "drop Packet.");
 			tunnel_recv_packetPool.produceWithdraw(pkt_node);
 		} else {
+			pkt_node->addProcessTimeTrack("produceCompleted");
 			tunnel_recv_packetPool.produceCompleted(pkt_node);
-			if (OPEN_DEBUGLOG)
-				log(log_level::DEBUG, FUN_NAME, "check point[consumeCompleted] packet duration:" + to_string(pkt_node->getPktNodeDurationMicroseconds().count()) + " microseconds.");
 		}
 	}
+	tunnel_recv_packetPool.terminateProcess();
 	stringstream ss;
 	ss << this_thread::get_id();
-	log(log_level::FATAL, FUN_NAME, "thread[" + ss.str() + "] exit!");
+	cLogger.log(log_level::FATAL, FUN_NAME, "thread[" + ss.str() + "] exit!");
 	return 0;
 }

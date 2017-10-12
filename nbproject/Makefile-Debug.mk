@@ -36,6 +36,7 @@ OBJECTDIR=${CND_BUILDDIR}/${CND_CONF}/${CND_PLATFORM}
 # Object Files
 OBJECTFILES= \
 	${OBJECTDIR}/get_config.o \
+	${OBJECTDIR}/logger.o \
 	${OBJECTDIR}/mobilegt_TunDataProcess.o \
 	${OBJECTDIR}/mobilegt_TunReceiver.o \
 	${OBJECTDIR}/mobilegt_TunnelConnectChecker.o \
@@ -83,6 +84,11 @@ ${OBJECTDIR}/get_config.o: get_config.cpp
 	${MKDIR} -p ${OBJECTDIR}
 	${RM} "$@.d"
 	$(COMPILE.cc) -g -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/get_config.o get_config.cpp
+
+${OBJECTDIR}/logger.o: logger.cpp
+	${MKDIR} -p ${OBJECTDIR}
+	${RM} "$@.d"
+	$(COMPILE.cc) -g -std=c++11 -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/logger.o logger.cpp
 
 ${OBJECTDIR}/mobilegt_TunDataProcess.o: mobilegt_TunDataProcess.cpp
 	${MKDIR} -p ${OBJECTDIR}
@@ -148,6 +154,19 @@ ${OBJECTDIR}/get_config_nomain.o: ${OBJECTDIR}/get_config.o get_config.cpp
 	    $(COMPILE.cc) -g -std=c++11 -Dmain=__nomain -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/get_config_nomain.o get_config.cpp;\
 	else  \
 	    ${CP} ${OBJECTDIR}/get_config.o ${OBJECTDIR}/get_config_nomain.o;\
+	fi
+
+${OBJECTDIR}/logger_nomain.o: ${OBJECTDIR}/logger.o logger.cpp 
+	${MKDIR} -p ${OBJECTDIR}
+	@NMOUTPUT=`${NM} ${OBJECTDIR}/logger.o`; \
+	if (echo "$$NMOUTPUT" | ${GREP} '|main$$') || \
+	   (echo "$$NMOUTPUT" | ${GREP} 'T main$$') || \
+	   (echo "$$NMOUTPUT" | ${GREP} 'T _main$$'); \
+	then  \
+	    ${RM} "$@.d";\
+	    $(COMPILE.cc) -g -std=c++11 -Dmain=__nomain -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/logger_nomain.o logger.cpp;\
+	else  \
+	    ${CP} ${OBJECTDIR}/logger.o ${OBJECTDIR}/logger_nomain.o;\
 	fi
 
 ${OBJECTDIR}/mobilegt_TunDataProcess_nomain.o: ${OBJECTDIR}/mobilegt_TunDataProcess.o mobilegt_TunDataProcess.cpp 

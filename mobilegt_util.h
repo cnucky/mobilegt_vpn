@@ -43,23 +43,11 @@ using namespace std;
 #include "cryptopp/modes.h"
 #include "cryptopp/filters.h"
 
-extern string LOG_DIR;
-extern string logfileNameBase;
-extern int loground[10];
-extern int cLoground;
-extern string currentLogFile;
-extern ofstream logger;
+#include "logger.h"
 
 extern string PROC_DIR;
 extern string secret;
 extern bool SYSTEM_EXIT;
-extern bool OPEN_DEBUGLOG;
-
-enum log_level {
-	DEBUG, INFO, WARN, ERROR, FATAL
-};
-
-extern log_level LOG_LEVEL_SET;
 
 void intToByte(int i, byte *bytes, int size = 4);
 
@@ -76,12 +64,6 @@ string numToString(Type num) {
 	ss >> s;
 	return s;
 }
-
-
-void checkLogger();
-
-log_level getLogLevel(string str_loglevel);
-void log(log_level ll, string fun_name, string log_str, bool checkLogFile = true);
 
 /*
  * 解密/加密辅助类
@@ -144,9 +126,9 @@ public:
 	////     TunIPAddrPool("172.16.0.0","255.255.0.0") 可支持(2^16-2)6万多个客户端同时使用
 	////     TunIPAddrPool("10.77.0.0","255.255.0.0") 可支持(2^16-2)6万多个客户端同时使用
 	////     TunIPAddrPool("10.0.0.0","255.0.0.0") 可支持(2^24-2)1千万多个客户端同时使用
-	TunIPAddrPool(string netaddr, string netmask); //该方法未实现,系统固定使用了10.77.0.0/255.255.0.0初始化
+	//TunIPAddrPool(string netaddr, string netmask); //该方法未实现,系统固定使用了10.77.0.0/255.255.0.0初始化
 
-	TunIPAddrPool(string assign_ip_recorder); //对象初始化时读取历史分配记录,系统固定使用了10.77.0.0/255.255.0.0初始化
+	TunIPAddrPool(string assign_ip_recorder, CacheLogger & cLogger); //对象初始化时读取历史分配记录,系统固定使用了10.77.0.0/255.255.0.0初始化
 
 	//// 保存tun地址分配历史记录
 	//// #分配时间\t设备ID号\t分配的IP
@@ -165,6 +147,7 @@ private:
 	unordered_map<string, string> umap_deviceId_tunip; //缓存已分配的IP记录
 	bool exceedScope = false;
 	mutex mtx_tunaddr_pool;
+	CacheLogger & cLogger;
 };
 
 /*
@@ -189,6 +172,11 @@ private:
 	int dataPktCount_recv = 0;
 	int dataPktCount_send = 0;
 	mutex mtx_peerClient;
+	mutex mtx_recentConnectTime;
+	mutex mtx_cmdPktCount_recv;
+	mutex mtx_cmdPktCount_send;
+	mutex mtx_dataPktCount_recv;
+	mutex mtx_dataPktCount_send;
 public:
 	string getPeer_deviceId();
 	string getPeer_tun_ip();
@@ -214,9 +202,34 @@ public:
 	void resetDataCount();
 };
 
+/**
+////单实例模式模板
+class Singleton:
+{
+	// 其它成员
+public:
+	static Singleton &GetInstance(){
+		static Singleton instance;
+		return instance;
+	}
+	//或者使用返回指针的形式
+	static Singleton *GetInstance(){
+		static Singleton instance;
+		return &instance;
+	}
+private:
+	Singleton(){};
+	Singleton(const Singleton&);
+	Singleton & operate = (const Singleton&);
+	//Singleton(const Singleton&);和Singleton & operate = (const Singleton&);函数
+	//我们声明成私用的，并且只声明不实现。从而实现禁止类拷贝和类赋值
+	//
+}
+ */
+
 /*
  * 
- * 客户端记录表，单实例类
+ * 客户端记录表，不再使用单实例类模式
  * 该类对象用于维护系统当前所有连接的客户端记录
  * 使用字典结构,key为分配给该手机客户端的tun接口地址,value为PeerClient对象指针
  * 设置了mtx_peerClientTable作为多线程并发操作锁，避免同时操作
@@ -226,7 +239,7 @@ public:
 class PeerClientTable {
 public:
 
-	static PeerClientTable * getInstance();
+	//static PeerClientTable * getInstance();
 
 	PeerClient * getPeerClientByTunIP(string tun_ip);
 
@@ -240,16 +253,28 @@ public:
 	~PeerClientTable();
 
 	unordered_map<string, PeerClient*> getUmap_tunip_client() const;
+	PeerClientTable(CacheLogger & cLogger);
 private:
 
-	PeerClientTable();
-	static PeerClientTable *single_Instance;	
+	//static PeerClientTable *single_Instance;
 	//一个tunip对应一个客户端,不同的客户端使用不同的deviceId,系统依据deviceId分配不同的tunip
 	unordered_map<string, PeerClient *> umap_tunip_client;
 	//internetip_port对应唯一的客户端, internetip_port=internet_ip:internet_port
 	//多个客户端可能会使用同样的internetip(例如:当多个客户端通过无线路由器上网)
 	unordered_map<string, PeerClient *> umap_internetip_port_client;
 	mutex mtx_peerClientTable;
+	CacheLogger & cLogger;
+};
+
+/**
+ * 处理时间跟踪
+ * 
+ */
+class ProcessTimeTrack {
+public:
+	string str_track_description; //跟踪点描述
+	std::chrono::system_clock::time_point timestamp; //跟踪点的时间戳
+
 };
 
 /**
@@ -271,10 +296,13 @@ public:
 	string pkt_tunAddr; //对于tun_interface接收的数据需记录目的地址(tun_interface地址),后续处理报文需依据这个地址找到客户端internet地址
 	string pkt_internetAddr; //记录节点数据报文来源IP地址,只用于记录手机客户端的ip
 	int pkt_internetPort; //记录节点数据报文来源端口,只用于记录手机客户端的端口
-	std::chrono::microseconds getPktNodeDurationMicroseconds();//获取报文数据到当前时间的时间间隔,便于观察一个报文从接收到发送的处理时间延迟
+	std::chrono::microseconds getPktNodeDurationMicroseconds(); //获取报文数据到当前时间的时间间隔,便于观察一个报文从接收到发送的处理时间延迟
 	PacketNode(int nodeIndex);
-
+	vector<ProcessTimeTrack> vec_process_TT;
 	~PacketNode();
+	void addProcessTimeTrack(string track_description); //添加一个处理时间跟踪记录
+	string getStrProcessTimeTrack(); //打印输出处理时间跟踪记录
+	void clear(); //清除节点数据
 };
 
 //// 
@@ -284,7 +312,7 @@ public:
 class PacketPool {
 public:
 	const static int POOL_NODE_MAX_NUMBER = 2000; //缓冲池最大节点数目
-	PacketPool();
+	PacketPool(CacheLogger & cLogger);
 	~PacketPool();
 	PacketNode* produce(); //得到一个用于接收网络数据报文的节点
 	void produceCompleted(PacketNode * const pkt_node); //节点已接收完网络数据报文,加入待处理队列
@@ -293,8 +321,7 @@ public:
 	void consumeCompleted(PacketNode * const pkt_node); //节点数据处理完毕,加入可接收数据的结点队列
 	int getRemainInConsumer();
 	int getReaminInProducer();
-	std::condition_variable consume_cv;
-	std::condition_variable produce_cv;
+	void terminateProcess();
 
 private:
 	PacketNode* ptr_pktNodePool[POOL_NODE_MAX_NUMBER];
@@ -302,7 +329,11 @@ private:
 	mutex mtx_queue_consumer;
 	queue<int> queue_producer; //可接收数据的结点索引队列,记录当前可用于接收网络数据报文结点链表,需接收数据时从链表中取下一个结点用于接收数据. 接收完数据后结点放入queue_consumer.
 	queue<int> queue_consumer; //待处理的结点索引队列,记录当前已接收到数据的结点链表.数据处理线程从链表中取下一个结点处理，处理完毕后将结点放回queue_producer.
-
+	std::condition_variable consume_cv;
+	std::condition_variable produce_cv;
+	std::mutex mtx_consume_cv;
+	std::mutex mtx_produce_cv;
+	CacheLogger & cLogger;
 };
 
 

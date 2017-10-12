@@ -35,145 +35,18 @@ EncryptDecryptHelper::EncryptDecryptHelper() {
 }
 
 //// 
-//// 日志级别类型转换处理:字符串到enum类型处理
-////
-log_level getLogLevel(string str_loglevel) {
-	log_level ll = log_level::DEBUG;
-	if (str_loglevel == "DEBUG")
-		ll = log_level::DEBUG;
-	else if (str_loglevel == "INFO")
-		ll = log_level::INFO;
-	else if (str_loglevel == "WARN")
-		ll = log_level::WARN;
-	else if (str_loglevel == "ERROR")
-		ll = log_level::ERROR;
-	else if (str_loglevel == "FATAL")
-		ll = log_level::FATAL;
-
-	return ll;
-}
-
-//// 
-//// 日志方法用到的currentLogFile也是个全局变量
-//// 全局变量,日志操作相关的一个锁变量,分离出无锁版本的_log()方法,只使用一个锁变量
-//// 
-mutex mtx_log; //mtx.lock(),mtx.unlock()
-//mutex mtx_checklog;//该锁变量取消,合并为一个锁变量
-void log(log_level ll, string fun_name, string log_str, bool checkLogFile) {
-	//如果配置文件设定日志输出级别为WARN,则ll级别为DEBUG和INFO的信息不会输出
-	if (ll >= LOG_LEVEL_SET) {
-		mtx_log.lock(); //logger上锁
-		auto logTime = chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-		//std::put_time(std::localtime(&logTime), "%F %T");
-		cout << std::put_time(std::localtime(&logTime), "%F %T") << " ";
-		logger << std::put_time(std::localtime(&logTime), "%F %T") << " ";
-		switch (ll) {
-			case DEBUG:
-				cout << "DEBUG:";
-				logger << "DEBUG:";
-				break;
-			case INFO:
-				cout << "INFO:";
-				logger << "INFO:";
-				break;
-			case WARN:
-				cout << "WARN:";
-				logger << "WARN:";
-				break;
-			case ERROR:
-				cout << "ERROR:";
-				logger << "ERROR:";
-				break;
-			case FATAL:
-				cout << "FATAL:";
-				logger << "FATAL:";
-				break;
-		}
-		cout << " [" << fun_name << "] " << log_str << endl;
-		logger << " [" << fun_name << "] " << log_str << endl;
-		mtx_log.unlock(); //释放logger锁
-		if (checkLogFile)
-			checkLogger();
-	}
-}
-void _log(log_level ll, string fun_name, string log_str) {
-	//如果配置文件设定日志输出级别为WARN,则ll级别为DEBUG和INFO的信息不会输出
-	if (ll >= LOG_LEVEL_SET) {
-		auto logTime = chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-		//std::put_time(std::localtime(&logTime), "%F %T");
-		cout << std::put_time(std::localtime(&logTime), "%F %T") << " ";
-		logger << std::put_time(std::localtime(&logTime), "%F %T") << " ";
-		switch (ll) {
-			case DEBUG:
-				cout << "DEBUG:";
-				logger << "DEBUG:";
-				break;
-			case INFO:
-				cout << "INFO:";
-				logger << "INFO:";
-				break;
-			case WARN:
-				cout << "WARN:";
-				logger << "WARN:";
-				break;
-			case ERROR:
-				cout << "ERROR:";
-				logger << "ERROR:";
-				break;
-			case FATAL:
-				cout << "FATAL:";
-				logger << "FATAL:";
-				break;
-		}
-		cout << " [" << fun_name << "] " << log_str << endl;
-		logger << " [" << fun_name << "] " << log_str << endl;
-	}
-}
-//// 
-//// 该方法检测日志文件是过大,过大则round robin处理
-//// 每个日志文件最大10*1024*1024即10M,超过则写入下一个日志文件
-//// 
-void checkLogger() {
-	mtx_log.lock();
-	const string FUN_NAME = "mobilegt_util-->checkLogger";
-	//已分离出一个无锁版本的_log()方法
-	//无需设置,checkLogger调用的方法log()方法是无锁版本的_log()方法
-	//const bool CHECK_LOGGER = false; //必须设置为false,否则log()----checklogger()----log()死递归了
-	if (!logger.is_open()) {
-		logger.open((LOG_DIR + currentLogFile).c_str(), ios::trunc | ios::out);
-		_log(log_level::INFO, FUN_NAME, "openfile:" + LOG_DIR + currentLogFile);
-	}
-	struct stat buf;
-
-	if (stat((LOG_DIR + currentLogFile).c_str(), &buf) < 0) {
-		_log(log_level::ERROR, FUN_NAME, "stat file failed:" + LOG_DIR + currentLogFile);
-	} else {
-		if (buf.st_size > (10 * 1024 * 1024)) {
-			_log(log_level::DEBUG, FUN_NAME, LOG_DIR + currentLogFile + " file size is " + to_string(buf.st_size));
-			cLoground++;
-			cLoground %= 10;
-			currentLogFile = logfileNameBase + "." + to_string(loground[cLoground]);
-			logger.close();
-			logger.open((LOG_DIR + currentLogFile).c_str(), ios::trunc | ios::out);
-			_log(log_level::INFO, FUN_NAME, "open new file " + LOG_DIR + currentLogFile);
-		}
-	}
-	mtx_log.unlock();
-}
-
-//// 
-TunIPAddrPool::TunIPAddrPool(string netaddr, string netmask) : pool_netaddr(netaddr), pool_netmask(netmask) {
-	//// 未实现
-}
+//TunIPAddrPool::TunIPAddrPool(string netaddr, string netmask) : pool_netaddr(netaddr), pool_netmask(netmask) {
+//// 未实现
+//}
 
 //// 
 //// 构造函数
 //// 读取assign_ip_recorder文件，初始化历史分配情况，保证同样的deviceId与分配的IP有一一对应关系
 //// 
-TunIPAddrPool::TunIPAddrPool(string assign_ip_recorder) : assign_ip_recorder(assign_ip_recorder) {
+TunIPAddrPool::TunIPAddrPool(string assign_ip_recorder, CacheLogger & cLogger) : assign_ip_recorder(assign_ip_recorder), cLogger(cLogger) {
 	mtx_tunaddr_pool.lock();
 	const string FUN_NAME = "TunIPAddrPool->TunIPAddrPool";
-	log(log_level::DEBUG, FUN_NAME, "initial TunIPAddrPool");
+	//log(log_level::DEBUG, FUN_NAME, "initial TunIPAddrPool");
 	ifstream infile((PROC_DIR + assign_ip_recorder).c_str());
 	if (!infile) {
 		cout << "file open error.[" << PROC_DIR + assign_ip_recorder << "]" << endl;
@@ -209,10 +82,10 @@ TunIPAddrPool::TunIPAddrPool(string assign_ip_recorder) : assign_ip_recorder(ass
 		ip_index1 = 1;
 	}
 	if (ip_index2 == IP_INDEX2_MAX && ip_index1 == IP_INDEX1_MAX) {
-		log(log_level::FATAL, FUN_NAME, "exceed ip_index1 & ip_index2. current ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
+		//log(log_level::FATAL, FUN_NAME, "exceed ip_index1 & ip_index2. current ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
 	}
 	infile.close();
-	log(log_level::INFO, FUN_NAME, "initial ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
+	//log(log_level::INFO, FUN_NAME, "initial ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
 	mtx_tunaddr_pool.unlock();
 }
 
@@ -231,22 +104,20 @@ string TunIPAddrPool::assignTunIPAddr(string deviceId) {
 	string tun_ip;
 	auto f = umap_deviceId_tunip.find(deviceId);
 	if (f == umap_deviceId_tunip.end()) {
-		if (OPEN_DEBUGLOG)
-			log(log_level::DEBUG, FUN_NAME, "cannot find a assigned tun ip for deviceId[" + deviceId + "]");
+		//log(log_level::DEBUG, FUN_NAME, "cannot find a assigned tun ip for deviceId[" + deviceId + "]");
 		//// #ip_prefix.#ipindex2.#ipindex1
 		//// example: 10.77.0.1 10.77.0.2 10.77.0.3 ...
 		string newip = "";
 		if (!exceedScope) {
 			newip = ip_prefix + "." + to_string(ip_index2) + "." + to_string(ip_index1);
-			if (OPEN_DEBUGLOG)
-				log(log_level::DEBUG, FUN_NAME, "assigned tun_ip is:[" + newip + "] current ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
+			//log(log_level::DEBUG, FUN_NAME, "assigned tun_ip is:[" + newip + "] current ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
 			ip_index1++; //所有已分配的ip再加1为第一个可分配IP
 			if (ip_index1 > IP_INDEX1_MAX) {
 				ip_index2++;
 				ip_index1 = 1;
 			}
 			if (ip_index2 == IP_INDEX2_MAX && ip_index1 == IP_INDEX1_MAX) {
-				log(log_level::FATAL, FUN_NAME, "exceed ip_index1 & ip_index2. current ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
+				//log(log_level::FATAL, FUN_NAME, "exceed ip_index1 & ip_index2. current ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
 				exceedScope = true;
 			}
 
@@ -260,12 +131,11 @@ string TunIPAddrPool::assignTunIPAddr(string deviceId) {
 			outfile << newip << "=" << deviceId << endl;
 			outfile.close();
 		} else {
-			log(log_level::ERROR, FUN_NAME, "cannot assign tun_ip. current ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
+			//log(log_level::ERROR, FUN_NAME, "cannot assign tun_ip. current ip_index1:" + to_string(ip_index1) + " ip_index2:" + to_string(ip_index2));
 		}
 		tun_ip = newip;
 	} else {
-		if (OPEN_DEBUGLOG)
-			log(log_level::DEBUG, FUN_NAME, "find a assigned tun ip.");
+		//log(log_level::DEBUG, FUN_NAME, "find a assigned tun ip.");
 		tun_ip = f->second;
 	}
 	mtx_tunaddr_pool.unlock();
@@ -341,9 +211,9 @@ void PeerClient::setPeer_internet_port(int internet_port) {
 
 //// 
 void PeerClient::refreshRecentConnectTime() {
-	mtx_peerClient.lock();
+	mtx_recentConnectTime.lock();
 	recentConnectTime = std::chrono::system_clock::now();
-	mtx_peerClient.unlock();
+	mtx_recentConnectTime.unlock();
 }
 
 //// 
@@ -354,18 +224,18 @@ std::chrono::system_clock::time_point PeerClient::getRecentConnectTime() {
 
 //// 
 void PeerClient::increaseDataPktCount_recv(int count) {
-	mtx_peerClient.lock();
+	mtx_dataPktCount_recv.lock();
 	while (count--)
 		dataPktCount_recv++;
-	mtx_peerClient.unlock();
+	mtx_dataPktCount_recv.unlock();
 }
 
 //// 
 void PeerClient::increaseDataPktCount_send(int count) {
-	mtx_peerClient.lock();
+	mtx_dataPktCount_send.lock();
 	while (count--)
 		dataPktCount_send++;
-	mtx_peerClient.unlock();
+	mtx_dataPktCount_send.unlock();
 }
 
 //// 
@@ -379,16 +249,16 @@ int PeerClient::getDataPktCount_recv() const {
 	return dataPktCount_recv;
 }
 void PeerClient::increaseCmdPktCount_send(int count) {
-	mtx_peerClient.lock();
+	mtx_cmdPktCount_send.lock();
 	while (count--)
 		cmdPktCount_send++;
-	mtx_peerClient.unlock();
+	mtx_cmdPktCount_send.unlock();
 }
 void PeerClient::increaseCmdPktCount_recv(int count) {
-	mtx_peerClient.lock();
+	mtx_cmdPktCount_recv.lock();
 	while (count--)
 		cmdPktCount_recv++;
-	mtx_peerClient.unlock();
+	mtx_cmdPktCount_recv.unlock();
 }
 int PeerClient::getCmdPktCount_send() const {
 	return cmdPktCount_send;
@@ -408,8 +278,8 @@ void PeerClient::resetDataCount() {
 //// 
 //// class PeerClientTable
 //// 
-PeerClientTable * PeerClientTable::single_Instance = NULL;
-PeerClientTable::PeerClientTable() {
+//PeerClientTable * PeerClientTable::single_Instance = NULL;
+PeerClientTable::PeerClientTable(CacheLogger & cLogger) : cLogger(cLogger) {
 	//构造函数是私有的  
 
 }
@@ -418,26 +288,25 @@ PeerClientTable::PeerClientTable() {
 PeerClientTable::~PeerClientTable() {
 	mtx_peerClientTable.lock();
 	const string FUN_NAME = "~PeerClientTable";
-	if (OPEN_DEBUGLOG)
-		log(log_level::DEBUG, FUN_NAME, "destructor clear all peer client object.");
-	if (single_Instance == NULL) {
-		for (auto iter = umap_tunip_client.begin(); iter != umap_tunip_client.end(); iter++) {
-			PeerClient * p_peerClient = iter->second;
-			delete p_peerClient;
-		}
-		delete single_Instance;
-	}
+	cLogger.log(log_level::DEBUG, FUN_NAME, "destructor clear all peer client object.");
+	//	if (single_Instance == NULL) {
+	//		for (auto iter = umap_tunip_client.begin(); iter != umap_tunip_client.end(); iter++) {
+	//			PeerClient * p_peerClient = iter->second;
+	//			delete p_peerClient;
+	//		}
+	//		delete single_Instance;
+	//	}
 	umap_tunip_client.clear();
 	umap_internetip_port_client.clear();
 	mtx_peerClientTable.unlock();
 }
 
 //// 
-PeerClientTable * PeerClientTable::getInstance() {
-	if (single_Instance == NULL) //判断是否第一次调用  
-		single_Instance = new PeerClientTable();
-	return single_Instance;
-}
+//PeerClientTable * PeerClientTable::getInstance(CacheLogger & cLogger) {
+//	if (single_Instance == NULL) //判断是否第一次调用  
+//		single_Instance = new PeerClientTable(cLogger);
+//	return single_Instance;
+//}
 
 //// 
 PeerClient * PeerClientTable::getPeerClientByTunIP(string tun_ip) {
@@ -494,8 +363,7 @@ int PeerClientTable::deletePeerClient(string tun_ip) {
 	const string FUN_NAME = "deletePeerClient";
 	int result = 0;
 	auto iter1 = umap_tunip_client.find(tun_ip);
-	if (OPEN_DEBUGLOG)
-		log(log_level::DEBUG, FUN_NAME, "find tun_ip:" + tun_ip);
+	cLogger.log(log_level::DEBUG, FUN_NAME, "find tun_ip:" + tun_ip);
 	if (iter1 != umap_tunip_client.end()) {
 		PeerClient * p_peerClient = umap_tunip_client[tun_ip];
 		string internetip_port = p_peerClient->getPeer_internet_ip() + ":" + to_string(p_peerClient->getPeer_internet_port());
@@ -504,8 +372,7 @@ int PeerClientTable::deletePeerClient(string tun_ip) {
 			umap_internetip_port_client.erase(iter2);
 		}
 		umap_tunip_client.erase(iter1);
-		if (OPEN_DEBUGLOG)
-			log(log_level::DEBUG, FUN_NAME, "begin delete p_peerClient");
+		cLogger.log(log_level::DEBUG, FUN_NAME, "begin delete p_peerClient");
 		delete p_peerClient;
 		result = 1;
 	}
@@ -518,11 +385,8 @@ bool PeerClientTable::checkPeerInternetIPandPort(string internet_ip, int port) {
 	const string FUN_NAME = "checkPeerInternetIPandPort";
 	bool succeed = false;
 	string internetip_port = internet_ip + ":" + to_string(port);
-	if (OPEN_DEBUGLOG)
-		log(log_level::DEBUG, FUN_NAME, "begin check: " + internetip_port);
 	if (umap_internetip_port_client.find(internetip_port) != umap_internetip_port_client.end()) {
-		if (OPEN_DEBUGLOG)
-			log(log_level::DEBUG, FUN_NAME, "finded " + internetip_port + ". begin check time");
+		cLogger.log(log_level::DEBUG, FUN_NAME, "found " + internetip_port + ". begin check time");
 		PeerClient * p_peerClient = umap_internetip_port_client[internetip_port];
 
 		std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
@@ -532,9 +396,13 @@ bool PeerClientTable::checkPeerInternetIPandPort(string internet_ip, int port) {
 		int tt = std::chrono::duration_cast<std::chrono::seconds>(now - recent).count();
 		if (tt <= 30 * 60) {
 			succeed = true;
-			p_peerClient->refreshRecentConnectTime();
+			//超过10秒才更新
+			if (tt > 10)
+				p_peerClient->refreshRecentConnectTime();
 			p_peerClient->increaseDataPktCount_send();
 		}
+	} else {
+		cLogger.log(log_level::DEBUG, FUN_NAME, "not found: " + internetip_port);
 	}
 	return succeed;
 }
@@ -552,19 +420,39 @@ PacketNode::PacketNode(int nodeIndex) : index(nodeIndex) {
 PacketNode::~PacketNode() {
 	delete[] ptr;
 }
+//得到报文接收到当前的持续时间
 std::chrono::microseconds PacketNode::getPktNodeDurationMicroseconds() {
 	auto pktNode_d = std::chrono::system_clock::now() - timestamp;
 	return std::chrono::duration_cast<std::chrono::microseconds>(pktNode_d);
 }
+//添加一个处理时间跟踪记录
+void PacketNode::addProcessTimeTrack(string track_description) {
+	ProcessTimeTrack ptt;
+	ptt.str_track_description = track_description;
+	ptt.timestamp = std::chrono::system_clock::now();
+	vec_process_TT.push_back(ptt);
+}
 
+//打印输出处理时间跟踪记录
+string PacketNode::getStrProcessTimeTrack() {
+	string str_track = "pktnode[" + to_string(index) + "] size(" + to_string(pkt_len) + ") processTT(microseconds) ";
+	for (ProcessTimeTrack vec : vec_process_TT) {
+		auto tt_d = vec.timestamp - timestamp;
+		str_track += vec.str_track_description + ":" + to_string(std::chrono::duration_cast<std::chrono::microseconds>(tt_d).count()) + " ";
+	}
+	return str_track;
+}
+void PacketNode::clear() {
+	pkt_len = 0;
+	vec_process_TT.clear();
+}
 //// 
 //// class PacketPool
 //// 构造函数
 //// 报文缓冲池, 构造初始化构建分配POOL_NODE_MAX_NUMBER个缓冲节点用于存放数据
-PacketPool::PacketPool() {
+PacketPool::PacketPool(CacheLogger & cLogger) : cLogger(cLogger) {
 	const string FUN_NAME = "PacketPool";
-	if (OPEN_DEBUGLOG)
-		log(log_level::DEBUG, FUN_NAME, "packet pool constructor.");
+	cLogger.log(log_level::DEBUG, FUN_NAME, "packet pool constructor.");
 	for (int i = 0; i < POOL_NODE_MAX_NUMBER; i++) {
 		ptr_pktNodePool[i] = new PacketNode(i);
 		queue_producer.push(i); // 即:queue_producer.push(ptr_pktNodePool[i]->index);
@@ -581,17 +469,26 @@ PacketPool::~PacketPool() {
 
 //// 得到一个用于接收网络数据报文的节点
 PacketNode* PacketPool::produce() {
+	const string FUN_NAME = "PacketPool-->produce()";
 	int nodeIndex = -1;
-	mtx_queue_producer.lock();
-	if (!queue_producer.empty()) {
-		nodeIndex = queue_producer.front();
-		queue_producer.pop();
+	while (!SYSTEM_EXIT && nodeIndex < 0) {
+		mtx_queue_producer.lock();
+		if (!queue_producer.empty()) {
+			nodeIndex = queue_producer.front();
+			queue_producer.pop();
+		}
+		mtx_queue_producer.unlock();
+		if (nodeIndex < 0) {
+			cLogger.log(log_level::DEBUG, FUN_NAME, "produce_cv wait(lck(mtx_produce_cv)) ");
+			std::unique_lock <std::mutex> lck(mtx_produce_cv);
+			produce_cv.wait(lck);
+		}
 	}
-	mtx_queue_producer.unlock();
 	if (nodeIndex >= 0)
 		return ptr_pktNodePool[nodeIndex];
 	else
 		return NULL;
+
 }
 
 //// 结点已接收完网络数据报文,加入待处理队列
@@ -599,7 +496,7 @@ void PacketPool::produceCompleted(PacketNode * const pkt_node) {
 	mtx_queue_consumer.lock();
 	queue_consumer.push(pkt_node->index);
 	mtx_queue_consumer.unlock();
-	produce_cv.notify_all();
+	consume_cv.notify_all(); //唤醒所有阻塞等待的消费线程
 }
 //// 结点接收的数据为空或用于接收数据的结点不需要接收数据,回收结点用于下次接收
 void PacketPool::produceWithdraw(PacketNode * const pkt_node) {
@@ -608,13 +505,21 @@ void PacketPool::produceWithdraw(PacketNode * const pkt_node) {
 
 //// 得到一个需要处理(即,已接收网络数据报文)的节点
 PacketNode* PacketPool::consume() {
+	const string FUN_NAME = "PacketPool-->consume()";
 	int nodeIndex = -1;
-	mtx_queue_consumer.lock();
-	if (!queue_consumer.empty()) {
-		nodeIndex = queue_consumer.front();
-		queue_consumer.pop();
+	while (!SYSTEM_EXIT && nodeIndex < 0) {
+		mtx_queue_consumer.lock();
+		if (!queue_consumer.empty()) {
+			nodeIndex = queue_consumer.front();
+			queue_consumer.pop();
+		}
+		mtx_queue_consumer.unlock();
+		if (nodeIndex < 0) {
+			cLogger.log(log_level::DEBUG, FUN_NAME, "consume_cv wait(lck(mtx_consume_cv)) ");
+			std::unique_lock <std::mutex> lck(mtx_consume_cv);
+			consume_cv.wait(lck); //阻塞等待
+		}
 	}
-	mtx_queue_consumer.unlock();
 	if (nodeIndex >= 0)
 		return ptr_pktNodePool[nodeIndex];
 	else
@@ -623,15 +528,20 @@ PacketNode* PacketPool::consume() {
 
 //// 节点数据处理完毕,加入待处理队列
 void PacketPool::consumeCompleted(PacketNode * const pkt_node) {
-	pkt_node->pkt_len = 0;
+	//pkt_node->pkt_len = 0;
+	pkt_node->clear();
 	mtx_queue_producer.lock();
 	queue_producer.push(pkt_node->index);
 	mtx_queue_producer.unlock();
-	consume_cv.notify_all(); // 条件变量,唤醒所有线程.
+	produce_cv.notify_all(); // 条件变量,唤醒所有阻塞等待的生产线程.
 }
 int PacketPool::getRemainInConsumer() {
 	return queue_consumer.size();
 }
 int PacketPool::getReaminInProducer() {
 	return queue_producer.size();
+}
+void PacketPool::terminateProcess() {
+	produce_cv.notify_all();
+	consume_cv.notify_all();
 }
