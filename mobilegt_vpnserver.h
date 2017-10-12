@@ -13,18 +13,8 @@ int tunReceiver(int fd_tun_interface, PacketPool & tunIF_recv_packetPool, CacheL
 int tunnelDataProcess(PacketPool & tunnelReceiver_packetPool, int fd_tun_interface, int socketfd_tunnel, TunIPAddrPool & tunip_poo, PeerClientTable & peerClientTablel, const map<string, string> & conf_m, CacheLogger & cLogger);
 int tunnelReceiver(int fd_tunnel, PacketPool & tunnel_recv_packetPool, CacheLogger & cLogger);
 
-class ClientParameter {
-private:
-	//-m 1400 -a $PRIVATE_ADDR 32 -d $DNS_ADDR -r 0.0.0.0 0
-	//mtu
-	//dns
-	//route
-	//
-public:
-
-};
-
-class ClientRecorder {
-};
+void usage(char **argv);
+static int get_tunnel(const char *port, CacheLogger & cLogger);
+static int get_tun_interface(const char * name, CacheLogger & cLogger);
 
 #endif

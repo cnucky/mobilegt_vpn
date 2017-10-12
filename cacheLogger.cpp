@@ -37,7 +37,12 @@ void CacheLogger::log(log_level ll, string fun_name, string log_str) {
 	}
 }
 void CacheLogger::hibernateLog(vector<string> * logcache) {
-	checkLogger();
+	if (checkTimer <= 0) {
+		checkTimer = 5;
+		checkLogger();
+	} else {
+		checkTimer--;
+	}
 	mtx_file.lock();
 	for (string str_log : *logcache) {
 		cout << str_log;
@@ -102,7 +107,7 @@ void CacheLogger::checkLogger() {
 			currentLogFile = logfileNameBase + "." + to_string(loground[cLoground]);
 			logger.close();
 			logger.open((LOG_DIR + currentLogFile).c_str(), ios::trunc | ios::out);
-			log(log_level::INFO, FUN_NAME, "open new file " + LOG_DIR + currentLogFile);
+			log(log_level::DEBUG, FUN_NAME, "open new file " + LOG_DIR + currentLogFile);
 		}
 	}
 	mtx_file.unlock();

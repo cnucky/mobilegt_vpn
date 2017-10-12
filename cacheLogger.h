@@ -44,6 +44,7 @@ private:
 	vector<string> vec_cache1;
 	vector<string> vec_cache2;
 	int hibernate_interval = 2000; //milliseconds
+	int checkTimer=5;//每hiberante多少次检查一次log文件是否超出最大文件设置
 	mutex mtx_file;
 	bool STOP = false;
 	int CACHE_SWITCH_SIZE;

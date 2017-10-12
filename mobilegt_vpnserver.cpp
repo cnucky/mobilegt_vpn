@@ -26,9 +26,6 @@ bool SYSTEM_EXIT = false;
 
 string PROC_DIR = "proc/";
 
-void usage(char **argv);
-static int get_tunnel(const char *port, CacheLogger & cLogger);
-static int get_tun_interface(const char * name, CacheLogger & cLogger);
 int main(int argc, char **argv) {
 	const string FUN_NAME = "main";
 	if (argc < 3) {
@@ -40,7 +37,7 @@ int main(int argc, char **argv) {
 	//// 测试打印参数配置
 	PrintConfig(conf_m);
 
-	//// 配置日志
+	//// 配置日志模块
 	CacheLogger cLogger;
 	cLogger.logfileNameBase += conf_m["logfileNameBase"];
 	string str_LOGLEVEL = conf_m["LOG_LEVEL"];
@@ -59,12 +56,14 @@ int main(int argc, char **argv) {
 		cLogger.LOG_SIZE_MAX = stoi(str_logsize_max);
 	}
 	//// append方法或+运算均可以,之前编译出错是由于函数模板分离编译所致,并非string+运算使用错误
-	//// currentLogFile = logfileNameBase.append(".").append(numToString(loground[cLoground]));	
+	//// currentLogFile = logfileNameBase.append(".").append(numToString(loground[cLoground]));	numToString其实可用to_string()方法代替
 	cLogger.currentLogFile = cLogger.logfileNameBase + "." + numToString(cLogger.loground[cLogger.cLoground]); //第一个日志文件为$logfileNameBase.0
-	//checkLogger();
+
 	stringstream ss;
 	this_thread::sleep_for(chrono::milliseconds(500)); //// 暂停500毫秒
-	//// 启动日志记录线程
+	////
+	//// ==============启动日志记录线程===================
+	////
 	std::thread thread_cLogger(startlog, std::ref(cLogger));
 	ss.clear();
 	ss.str("");
@@ -99,7 +98,8 @@ int main(int argc, char **argv) {
 	TunIPAddrPool tunip_pool(assign_ip_recorder, cLogger);
 
 	this_thread::sleep_for(chrono::milliseconds(500)); //// 暂停500毫秒
-	//// 启动tunnel接口监听线程
+	//// 
+	//// ==================启动tunnel接口监听线程========================
 	//// 根据配置文件VPN_PORT设置,启动TunnelReceiver线程监听该端口
 	////
 	string tunnel_port = "8800";
@@ -122,7 +122,8 @@ int main(int argc, char **argv) {
 			+ ". thread[" + ss.str() + "]");
 	//thread_tunnel_recv.detach();
 
-	//// 启动TUN接口监听线程
+	//// 
+	//// ====================启动TUN接口监听线程====================
 	//// 根据配置文件TUN_NAME设置,启动TunReceiver线程
 	////
 	string tun_ifname = "tun0";
@@ -161,12 +162,13 @@ int main(int argc, char **argv) {
 	}
 	int tun_pallel_num = atoi(tun_pallel.c_str());
 	////
-	////
-	//// 启动多个线程处理两个缓冲池池里面的数据
+	//// ==============启动多个线程处理两个缓冲池池里面的数据==================
 	//// tunnel_recv_packetPool
 	//// tunIF_recv_packetPool
 	////
-	vector<thread> vec_thread_tunnel_dataProcess;
+	//// tunnel_recv_packetPool
+	////
+	vector<thread> vec_thread_tunnel_dataProcess;//// 记录已启动的线程对象
 	for (int i = 0; i < tunnel_pallel_num; i++) {
 
 		//// 启动线程处理tunnel socket接收到的数据,接收到的数据通过tun接口转发到internet
@@ -182,7 +184,7 @@ int main(int argc, char **argv) {
 	}
 	//// tunIF_recv_packetPool
 	////
-	vector<thread> vec_thread_tunIF_dataProcess;
+	vector<thread> vec_thread_tunIF_dataProcess;//// 记录已启动的线程对象
 	for (int i = 0; i < tun_pallel_num; i++) {
 		//// 启动线程处理tun接口接收的数据,tun接收到的数据通过socket发给客户端
 		//// 
@@ -195,6 +197,7 @@ int main(int argc, char **argv) {
 		//thread_tunIF_dataProcess.detach();
 	}
 	cLogger.log(log_level::INFO, FUN_NAME, "VPN server start completed.");
+	//// 
 	//// 主线程进入循环判断
 	while (!SYSTEM_EXIT) {
 		//检查系统退出文件标识
@@ -210,8 +213,9 @@ int main(int argc, char **argv) {
 		inTagFile.close();
 		this_thread::sleep_for(chrono::seconds(5)); //休眠5秒再次检查
 	}
-	// 检查到系统退出标识,等待其它线程运行终止,然后vpn server退出, 清理输出后关闭vpn server运行.
-	//this_thread::sleep_for(chrono::seconds(5)); //休眠5秒,等待其它线程退出再退出
+	//// 检查到系统退出标识,等待其它线程运行终止,然后vpn server退出, 清理输出后关闭vpn server运行.
+	//// this_thread::sleep_for(chrono::seconds(5)); //休眠5秒,等待其它线程退出再退出
+	//// 
 	thread_tunnel_recv.join();
 	thread_tunIF_recv.join();
 	for (auto &thread : vec_thread_tunnel_dataProcess)

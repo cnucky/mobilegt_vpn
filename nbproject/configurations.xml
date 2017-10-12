@@ -2,14 +2,14 @@
 <configurationDescriptor version="100">
   <logicalFolder name="root" displayName="root" projectFiles="true" kind="ROOT">
     <logicalFolder name="HeaderFiles" displayName="头文件" projectFiles="true">
+      <itemPath>cacheLogger.h</itemPath>
       <itemPath>get_config.h</itemPath>
-      <itemPath>logger.h</itemPath>
       <itemPath>mobilegt_util.h</itemPath>
       <itemPath>mobilegt_vpnserver.h</itemPath>
     </logicalFolder>
     <logicalFolder name="SourceFiles" displayName="源文件" projectFiles="true">
+      <itemPath>cacheLogger.cpp</itemPath>
       <itemPath>get_config.cpp</itemPath>
-      <itemPath>logger.cpp</itemPath>
       <itemPath>mobilegt_TunDataProcess.cpp</itemPath>
       <itemPath>mobilegt_TunReceiver.cpp</itemPath>
       <itemPath>mobilegt_TunnelConnectChecker.cpp</itemPath>
@@ -55,6 +55,10 @@
           <commandLine>-lcryptopp</commandLine>
         </linkerTool>
       </compileType>
+      <item path="cacheLogger.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="cacheLogger.h" ex="false" tool="3" flavor2="0">
+      </item>
       <folder path="TestFiles/f1">
         <cTool>
           <incDir>
@@ -74,10 +78,6 @@
       <item path="get_config.cpp" ex="false" tool="1" flavor2="0">
       </item>
       <item path="get_config.h" ex="false" tool="3" flavor2="0">
-      </item>
-      <item path="logger.cpp" ex="false" tool="1" flavor2="0">
-      </item>
-      <item path="logger.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="mobilegt_TunDataProcess.cpp" ex="false" tool="1" flavor2="0">
       </item>
@@ -120,6 +120,10 @@
           <developmentMode>5</developmentMode>
         </asmTool>
       </compileType>
+      <item path="cacheLogger.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="cacheLogger.h" ex="false" tool="3" flavor2="0">
+      </item>
       <folder path="TestFiles/f1">
         <cTool>
           <incDir>
@@ -138,10 +142,6 @@
       <item path="get_config.cpp" ex="false" tool="1" flavor2="0">
       </item>
       <item path="get_config.h" ex="false" tool="3" flavor2="0">
-      </item>
-      <item path="logger.cpp" ex="false" tool="1" flavor2="0">
-      </item>
-      <item path="logger.h" ex="false" tool="3" flavor2="0">
       </item>
       <item path="mobilegt_TunDataProcess.cpp" ex="false" tool="1" flavor2="0">
       </item>

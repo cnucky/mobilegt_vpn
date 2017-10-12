@@ -43,7 +43,7 @@ using namespace std;
 #include "cryptopp/modes.h"
 #include "cryptopp/filters.h"
 
-#include "logger.h"
+#include "cacheLogger.h"
 
 extern string PROC_DIR;
 extern string secret;

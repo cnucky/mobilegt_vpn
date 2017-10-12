@@ -103,8 +103,8 @@ client连接记录
 		data
 		.......
 		
-	
-	
-	
-	
+
+ls -l /usr/bin/dumpcap
+
+sudo chmod 4755 /usr/bin/dumpcap	
 	

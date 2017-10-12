@@ -28,3 +28,8 @@ sudo route add -net $ADDR_PREFIX dev $TUN_NAME
 echo "===========================split line=========================="
 netstat -rn
 sudo iptables -t nat -L
+
+#设置dumpcap无需sudo方式
+ls -l /usr/bin/dumpcap
+sudo chmod 4755 /usr/bin/dumpcap
+ls -l /usr/bin/dumpcap	

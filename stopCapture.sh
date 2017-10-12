@@ -15,26 +15,26 @@ CMD_NAME2="dumpcap"
 
 if [ $1 != "all" -a $1 != "ALL" -a $1 != "All" ];then
     #ps -ef | grep $CMD_NAME | grep $IF_NAME
-    PID=`ps -ef | grep $CMD_NAME | grep $IF_NAME | awk '{print $2}'`
-    PID2=`ps -ef | grep $CMD_NAME2 | grep $IF_NAME | awk '{print $2}'`
+    PID=`ps -ef | grep $CMD_NAME | grep $IF_NAME | grep -v "grep" | awk '{print $2}'`
+    PID2=`ps -ef | grep $CMD_NAME2 | grep $IF_NAME | grep -v "grep" | awk '{print $2}'`
 else
-    PID=`ps -ef | grep $CMD_NAME | awk '{print $2}'`
-    PID2=`ps -ef | grep $CMD_NAME2 | awk '{print $2}'`
+    PID=`ps -ef | grep $CMD_NAME | grep -v "grep" | awk '{print $2}'`
+    PID2=`ps -ef | grep $CMD_NAME2 | grep -v "grep" | awk '{print $2}'`
 fi
 
 if [ -z "$PID2" ];then
-    echo no PID2 NEED kill.
+    echo "    NO running $CMD_NAME2 process."
 else
-    echo kill PID2:$PID2
+    echo "    kill $CMD_NAME2 PID2:$PID2"
     #cat password | sudo -S kill -9 $PID2
-    sudo kill -9 $PID2
+    kill -9 $PID2
 fi
 
 if [ -z "$PID" ];then
-    echo no PID NEED kill.
+    echo "    NO running $CMD_NAME process."
 else
-    echo kill PID:$PID
+    echo "    kill $CMD_NAME PID:$PID"
     #cat password | sudo -S kill -9 $PID
-    sudo kill -9 $PID
+    kill -9 $PID
 fi
 
